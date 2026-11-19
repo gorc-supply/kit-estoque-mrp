@@ -1,0 +1,5 @@
+# Fins de linha LF no repositório (evita diferenças falsas no Windows e no Prettier).
+* text=auto eol=lf
+*.png binary
+*.webp binary
+*.xlsx binary

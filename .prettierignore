@@ -1,0 +1,7 @@
+dist
+coverage
+node_modules
+package-lock.json
+public/exemplos
+# Especificação mantida pelo Gabriel: não reformatar automaticamente.
+CLAUDE.md

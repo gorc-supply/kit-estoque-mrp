@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Suba sua planilha de estoque e receba curva ABC-XYZ, parâmetros de reposição, sugestão de compras e MRP em segundos — de graça e sem seus dados saírem do computador."
+    />
+    <meta name="theme-color" content="#0B1F3A" />
+    <title>Kit Estoque MRP</title>
+    <script>
+      // Aplica o tema antes da primeira pintura (evita piscar claro→escuro).
+      // Preferência manual em localStorage; sem ela, segue o sistema.
+      ;(function () {
+        var pref = null
+        try {
+          pref = localStorage.getItem('kit-estoque-mrp:tema')
+        } catch (e) {}
+        var escuro =
+          pref === 'escuro' ||
+          (pref !== 'claro' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.classList.toggle('dark', escuro)
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
