@@ -8,6 +8,11 @@ export default defineConfig({
   // Ajustar se o nome do repositório mudar.
   base: '/kit-estoque-mrp/',
   plugins: [react(), tailwindcss()],
+  build: {
+    // ECharts (aba de resultados) e ExcelJS (exportação) já são carregados sob demanda;
+    // o pacote inicial fica abaixo de 300 kB. Evita o aviso de chunk grande.
+    chunkSizeWarningLimit: 1000,
+  },
   test: {
     include: ['tests/**/*.test.ts'],
     environment: 'node',

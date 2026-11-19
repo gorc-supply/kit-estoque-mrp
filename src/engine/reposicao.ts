@@ -11,6 +11,8 @@ export interface EntradaReposicao {
   estoqueSeguranca: number | null
   pontoPedido: number | null
   estoqueMaximo: number | null
+  /** Lote de compra ajustado (Q*), usado quando Máx fica abaixo da posição. */
+  loteCompra: number | null
   loteMinimo: number
   multiplo: number
   custo: number
@@ -53,8 +55,17 @@ export function calcularReposicao(e: EntradaReposicao): SaidaReposicao {
   let sugestaoQtd = 0
   let prioridade: Prioridade | null = null
   let motivo = ''
+  let umLote = false
   if (e.pontoPedido !== null && e.estoqueMaximo !== null && posicao <= e.pontoPedido) {
-    sugestaoQtd = Math.max(0, ajustarLote(e.estoqueMaximo - posicao, e.loteMinimo, e.multiplo))
+    if (e.estoqueMaximo - posicao > 1e-9) {
+      sugestaoQtd = ajustarLote(e.estoqueMaximo - posicao, e.loteMinimo, e.multiplo)
+    } else if (e.loteCompra !== null && e.loteCompra > 0) {
+      // Máx = ES + Q* pode ficar abaixo do PP quando a demanda no lead time supera o lote
+      // (lead time longo, lote pequeno). Sem isso o item ficaria "Comprar" com sugestão zero:
+      // nesse caso sugerimos um lote Q*.
+      sugestaoQtd = e.loteCompra
+      umLote = true
+    }
     if (sugestaoQtd > 0) {
       if (riscoAntesChegada) prioridade = 'Urgente'
       else if (e.classeABC === 'A' || status === 'Ruptura' || status === 'Crítico')
@@ -67,6 +78,7 @@ export function calcularReposicao(e: EntradaReposicao): SaidaReposicao {
       motivo = `Posição ${num(posicao, 2)} ≤ PP ${num(Math.ceil(e.pontoPedido - 1e-9))}; cobertura ${cob} ${comp} LT ${num(e.leadTimeDias)} d`
       if (status === 'Ruptura') motivo = `Estoque zerado; ${motivo}`
       else if (status === 'Crítico') motivo = `Estoque abaixo do ES; ${motivo}`
+      if (umLote) motivo = `${motivo}; Máx abaixo da posição (lead time longo): sugerido 1 lote Q*`
     }
   }
 

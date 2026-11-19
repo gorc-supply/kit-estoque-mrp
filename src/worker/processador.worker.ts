@@ -11,7 +11,8 @@ import {
   mapearTabelas,
   type Tabelas,
 } from '../io/ler-planilha'
-import type { DoWorker, Mapas, ParaWorker } from './protocolo'
+import type { MapaColunas, NomeAba } from '../io/mapeamento'
+import type { DoWorker, Mapas, MapasNomes, ParaWorker } from './protocolo'
 
 declare const self: DedicatedWorkerGlobalScope
 
@@ -21,12 +22,42 @@ let mapasAtuais: Mapas = {}
 
 const enviar = (m: DoWorker) => self.postMessage(m)
 
+/** Nomes de cabeçalho → índices da tabela atual. */
+function nomesParaIndices(t: Tabelas, salvos: MapasNomes): Mapas {
+  const saida: Mapas = {}
+  for (const [aba, campos] of Object.entries(salvos) as [NomeAba, Record<string, string>][]) {
+    const tab = t[aba]
+    if (!tab || !campos) continue
+    const mapa: MapaColunas = {}
+    for (const [campo, nome] of Object.entries(campos)) {
+      const i = tab.cabecalhos.indexOf(nome)
+      if (i >= 0) mapa[campo] = i
+    }
+    saida[aba] = mapa
+  }
+  return saida
+}
+
+function indicesParaNomes(t: Tabelas, mapas: Mapas): MapasNomes {
+  const saida: MapasNomes = {}
+  for (const [aba, mapa] of Object.entries(mapas) as [NomeAba, MapaColunas][]) {
+    const tab = t[aba]
+    if (!tab || !mapa) continue
+    const nomes: Record<string, string> = {}
+    for (const [campo, i] of Object.entries(mapa)) {
+      if (i !== null && i !== undefined && tab.cabecalhos[i]) nomes[campo] = tab.cabecalhos[i]
+    }
+    saida[aba] = nomes
+  }
+  return saida
+}
+
 function calcular(id: number, parametros: ParaWorker['parametros']) {
-  if (!entrada) throw new ErroLeitura('Nenhuma planilha carregada.')
+  if (!entrada || !tabelas) throw new ErroLeitura('Nenhuma planilha carregada.')
   const resultado = processar(entrada, parametros, (etapa, fracao) =>
     enviar({ tipo: 'progresso', id, etapa, fracao: 0.3 + fracao * 0.7 }),
   )
-  enviar({ tipo: 'resultado', id, resultado, mapas: mapasAtuais })
+  enviar({ tipo: 'resultado', id, resultado, mapasNomes: indicesParaNomes(tabelas, mapasAtuais) })
 }
 
 self.onmessage = (ev: MessageEvent<ParaWorker>) => {
@@ -36,7 +67,10 @@ self.onmessage = (ev: MessageEvent<ParaWorker>) => {
       enviar({ tipo: 'progresso', id: msg.id, etapa: 'Lendo a planilha', fracao: 0.05 })
       tabelas = lerArquivos(msg.arquivos)
       entrada = null
-      const { mapas, pendencias, todas } = mapearTabelas(tabelas, msg.mapasSalvos)
+      const { mapas, pendencias, todas } = mapearTabelas(
+        tabelas,
+        nomesParaIndices(tabelas, msg.mapasSalvos),
+      )
       mapasAtuais = mapas
       if (pendencias.length) {
         enviar({ tipo: 'mapeamento', id: msg.id, pendencias, todas })

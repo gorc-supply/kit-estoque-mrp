@@ -208,6 +208,7 @@ export function processar(
       estoqueSeguranca: par.estoqueSeguranca,
       pontoPedido: par.pontoPedido,
       estoqueMaximo: par.estoqueMaximo,
+      loteCompra: par.loteCompra,
       loteMinimo,
       multiplo,
       custo: custo.custo,

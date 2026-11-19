@@ -16,11 +16,16 @@
     "typecheck": "tsc -b",
     "test": "vitest run",
     "test:watch": "vitest",
-    "demo": "tsx scripts/gerar-dados-demo.ts"
+    "demo": "tsx scripts/gerar-dados-demo.ts",
+    "otimizar-svg": "svgo -r -f src/assets --multipass && svgo public/favicon.svg --multipass"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",
+    "@tanstack/react-table": "^9.3.1",
+    "@tanstack/react-virtual": "^3.14.26",
+    "echarts": "^6.1.0",
     "exceljs": "^4.4.0",
+    "lucide-react": "^1.76.0",
     "papaparse": "^5.7.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
@@ -40,6 +45,7 @@
     "eslint-plugin-react-refresh": "^0.5.8",
     "globals": "^17.14.0",
     "prettier": "^3.10.1",
+    "svgo": "^4.1.0",
     "tailwindcss": "^4.3.5",
     "tsx": "^4.23.15",
     "typescript": "~6.0.3",

@@ -51,6 +51,89 @@
   }
 }
 
+/* Fundo do hero: ilustração original + sobreposição escura para contraste AA do texto. */
+.fundo-hero {
+  background-color: var(--color-marinho);
+  background-image:
+    linear-gradient(
+      90deg,
+      rgb(11 31 58 / 0.96) 0%,
+      rgb(11 31 58 / 0.82) 45%,
+      rgb(11 31 58 / 0.45) 100%
+    ),
+    url('../assets/bg/hero-armazem.svg');
+  background-size: cover;
+  background-position: right center;
+}
+@media (max-width: 640px) {
+  .fundo-hero {
+    background-image:
+      linear-gradient(180deg, rgb(11 31 58 / 0.9), rgb(11 31 58 / 0.9)),
+      url('../assets/bg/hero-armazem.svg');
+  }
+}
+
+/* Padrão sutil de paletes na área de trabalho (~5% de opacidade). */
+.fundo-paletes {
+  position: relative;
+  isolation: isolate;
+}
+.fundo-paletes::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-image: url('../assets/bg/padrao-paletes.svg');
+  background-size: 160px 160px;
+  opacity: 0.05;
+  pointer-events: none;
+}
+html.dark .fundo-paletes::before {
+  opacity: 0.08;
+}
+
+/* Borda de faixa de segurança nos alertas críticos. */
+.alerta-critico {
+  border-left-width: 6px;
+  border-image: url('../assets/bg/faixa-seguranca.svg') 0 0 0 8 / 0 0 0 6px repeat;
+}
+
+@keyframes aparecer {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Impressão / PDF: só o conteúdo, sem fundos nem controles. */
+@media print {
+  html,
+  html.dark {
+    color-scheme: light;
+  }
+  body {
+    background: #fff !important;
+    color: #0b1f3a !important;
+  }
+  .fundo-paletes::before {
+    display: none;
+  }
+  section,
+  table {
+    break-inside: avoid-page;
+  }
+  .overflow-auto,
+  .overflow-x-auto,
+  .overflow-y-auto {
+    overflow: visible !important;
+    max-height: none !important;
+  }
+}
+
 /* Respeita quem prefere menos movimento. */
 @media (prefers-reduced-motion: reduce) {
   *,

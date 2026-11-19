@@ -3,10 +3,10 @@
 
 import type { Parametros, Resultado } from '../engine/tipos'
 import type { ArquivoEntrada, PendenciaMapeamento } from '../io/ler-planilha'
-import type { DoWorker, Mapas, ParaWorker } from './protocolo'
+import type { DoWorker, Mapas, MapasNomes, ParaWorker } from './protocolo'
 
 export type RespostaProcessamento =
-  | { tipo: 'resultado'; resultado: Resultado; mapas: Mapas }
+  | { tipo: 'resultado'; resultado: Resultado; mapasNomes: MapasNomes }
   | { tipo: 'mapeamento'; pendencias: PendenciaMapeamento[]; todas: PendenciaMapeamento[] }
 
 type SemId<T> = T extends unknown ? Omit<T, 'id'> : never
@@ -45,7 +45,7 @@ export class ClienteProcessador {
     if (m.tipo === 'erro') p.rejeitar(new Error(m.mensagem))
     else if (m.tipo === 'mapeamento')
       p.resolver({ tipo: 'mapeamento', pendencias: m.pendencias, todas: m.todas })
-    else p.resolver({ tipo: 'resultado', resultado: m.resultado, mapas: m.mapas })
+    else p.resolver({ tipo: 'resultado', resultado: m.resultado, mapasNomes: m.mapasNomes })
   }
 
   private enviar(msg: SemId<ParaWorker>, progresso: AoProgresso, transferir: Transferable[] = []) {
@@ -60,7 +60,7 @@ export class ClienteProcessador {
 
   ler(
     arquivos: ArquivoEntrada[],
-    mapasSalvos: Mapas,
+    mapasSalvos: MapasNomes,
     parametros: Partial<Parametros>,
     progresso: AoProgresso,
   ) {

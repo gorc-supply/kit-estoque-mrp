@@ -316,6 +316,7 @@ interface Especificacao {
   m: MaterialDemo
   padrao: Padrao
   mediaMensal: number
+  custoReal: number
   mesInicio: number
   ruptura: boolean
   excesso: boolean
@@ -390,6 +391,7 @@ function montarCatalogo(rng: Rng): Especificacao[] {
           },
           padrao: 'suave',
           mediaMensal,
+          custoReal: custo,
           mesInicio: 0,
           ruptura: false,
           excesso: false,
@@ -492,7 +494,7 @@ export function gerarDemoIndustria(semente = 20261031): DadosDemo {
   for (const s of specs) {
     const fracionavel = FRACIONAVEIS.has(s.m.unidade)
     const arred = (x: number) => (fracionavel ? r2(x) : Math.round(x))
-    const custoReal = s.m.custo_unitario ?? r2(rng.logUniforme(2, 200))
+    const custoReal = s.custoReal
     const lt = Number.isFinite(s.m.lead_time_dias) ? s.m.lead_time_dias : 30
     const demanda = demandaMensal(s, rng)
 
@@ -560,7 +562,7 @@ export function gerarDemoIndustria(semente = 20261031): DadosDemo {
       }
       // Excesso proposital: compra grande ~2 meses antes da data-base.
       if (s.excesso && dia === totalDias - 60) {
-        const q = ajustarMultiplo(lote * 5, s.m.lote_minimo, s.m.multiplo_compra)
+        const q = ajustarMultiplo(lote * 3, s.m.lote_minimo, s.m.multiplo_compra)
         estoque = arred(estoque + q)
         movimentacoes.push({
           data,
