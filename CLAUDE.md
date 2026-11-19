@@ -554,6 +554,16 @@ Os testes do `engine/` são o contrato de correção. Incluir no mínimo:
 19. **Devoluções:** saída de 100 e devolução ao estoque de 20 no mesmo mês → demanda do mês = 80, saldo −80. Devolução ao fornecedor de 10 → saldo −10, demanda inalterada. Devolução ao estoque de 50 num mês com saída de 30 → demanda 0 (nunca negativa).
 20. **Giro semanal:** mesma base de dados processada no modo semanal usa períodos_por_ano = 52; o giro anualizado deve ficar próximo (±10%, por causa das semanas que cruzam a virada do mês) do calculado no modo mensal.
 21. **Volume:** gerar planilha sintética com 100 mil movimentações e 2 mil itens; o processamento no worker conclui sem travar a interface e sem erro de memória. Registrar o tempo no README.
+22. **Exemplo do Gabriel (posto percentil):** M1 = R$ 120.000/ano, LT 5 d, criticidade Baixa; M2 = R$ 40.000, LT 90 d, Alta; M3 = R$ 10.000, LT 20 d, Média. Pesos valor 40%, LT 25%, criticidade 35%.
+    - Normalizados: valor M1 1 · M2 0,5 · M3 0; LT M1 0 · M2 1 · M3 0,5; criticidade M1 0 · M2 1 · M3 0,5
+    - Scores: M1 = 0,40; M2 = 0,20 + 0,25 + 0,35 = 0,80; M3 = 0 + 0,125 + 0,175 = 0,30
+    - Ordem por valor: M1 > M2 > M3. Ordem multicritério: **M2 > M1 > M3**. O item de valor intermediário (M2) passa à frente do item caro (M1).
+23. **Mesmo exemplo com mín-máx:** valor M1 1 · M2 (40 − 10) ÷ 110 = 0,2727 · M3 0; LT M1 0 · M2 1 · M3 15 ÷ 85 = 0,1765 → scores M1 0,4000; M2 0,1091 + 0,25 + 0,35 = 0,7091; M3 0,0441 + 0,175 = 0,2191 → ordem M2 > M1 > M3.
+24. **Empate no posto percentil:** valores [10, 20, 20, 40] → postos 0; 0,5; 0,5; 1.
+25. **AHP consistente:** pesos-alvo 0,5 / 0,3 / 0,2 → matriz com aᵢⱼ = wᵢ ÷ wⱼ → média geométrica recupera exatamente 0,5 / 0,3 / 0,2 e CR = 0.
+26. **Matriz VED:** item B por valor e Vital → A; C e Desejável → C.
+27. **Dado faltando:** item sem criticidade recebe 0,5 e gera aviso; item com `classe_manual` mantém a classe manual independentemente do score.
+28. **OndeUsado:** item usado nos equipamentos E1 (Baixa) e E2 (Alta) → criticidade Alta.
 
 ---
 
@@ -582,6 +592,7 @@ Trabalhar **uma fase por vez**. Ao fim de cada fase: rodar lint, testes e build;
 | 6 | Exportação Excel (seção 11) + CSV + impressão | Planilha abre no Excel sem aviso de reparo |
 | 7 | Identidade visual, SVGs de fundo, responsividade, acessibilidade, modo escuro, polimento | Lighthouse ≥ 90 em Acessibilidade e Boas práticas |
 | 8 | README, og-image, workflow de deploy, LICENSE | Site no ar no GitHub Pages e prévia do link correta |
+| 9 | ABC multicritério (seção 16-B): critérios, normalização, pontuação ponderada, matriz VED, pesos (presets, sliders, AHP), Equipamentos/OndeUsado, Sankey, "Quem mudou de classe", estabilidade, aba ABC_Multicriterio, modelo e demo atualizados | Testes 22 a 28 passam e a demo mostra itens subindo e descendo de classe |
 
 ---
 
@@ -596,6 +607,93 @@ Trabalhar **uma fase por vez**. Ao fim de cada fase: rodar lint, testes e build;
 - Se um comando falhar, leia o erro, explique em uma frase e corrija. Não repita o mesmo comando às cegas.
 - Mantenha o bundle inicial leve: ExcelJS e ECharts carregados sob demanda quando possível.
 - Ao terminar cada fase, atualize a seção "Status" abaixo.
+
+## 16-B. Classificação ABC multicritério (criticidade, lead time e pesos da empresa) — Fase 9
+
+### Por que existe
+O ABC clássico olha só para valor de consumo. Na prática, um item de valor intermediário que demora 90 dias para chegar e alimenta uma máquina crítica merece mais proteção do que um item caro que chega em 5 dias e serve a um equipamento secundário. Muitas empresas já têm seus próprios pesos para isso. Este módulo deixa o usuário montar essa régua, ver quem mudou de classe e por quê, e usar a classe resultante em todo o resto da ferramenta.
+
+É **opcional**: com o módulo desligado, tudo funciona como antes (ABC por valor).
+
+### Entradas novas (todas opcionais)
+Na aba `Materiais`:
+
+| Coluna | Tipo | Direção | Observação |
+|---|---|---|---|
+| criticidade | texto ou número | maior = mais crítico | Aceitar Alta/Média/Baixa, A/B/C, V/E/D (Vital/Essencial/Desejável) ou escala 1–5 |
+| num_fornecedores | número | menor = mais crítico | 1 = fonte única |
+| possui_substituto | Sim/Não | Não = mais crítico | |
+| custo_parada_hora | número (R$/h) | maior = mais crítico | Custo de a máquina parar por falta do item |
+| classe_manual | A/B/C | — | Substitui o resultado; exige `justificativa_classe` |
+| justificativa_classe | texto | — | Aparece na planilha de saída |
+| crit_<nome> | número | escolhida na tela | Qualquer critério próprio da empresa (ex.: `crit_seguranca`, `crit_qualidade`) |
+
+Abas novas:
+- `Equipamentos`: equipamento, criticidade (mesmos formatos acima), setor.
+- `OndeUsado`: codigo, equipamento (um item pode servir a várias máquinas).
+
+**Regra:** se o item estiver em `OndeUsado`, a criticidade dele é a **maior** entre os equipamentos que atende, a menos que a coluna `criticidade` do próprio item esteja preenchida (o cadastro do item prevalece). Também fica disponível o critério automático "nº de equipamentos atendidos".
+
+### Critérios disponíveis
+Automáticos (calculados pelo motor): valor de consumo anual (Cv_anual), lead time (`lead_time_dias`), variabilidade (CV) e nº de equipamentos atendidos.
+Do cadastro: criticidade, nº de fornecedores, substituto, custo de parada e qualquer `crit_*`.
+
+O critério CV vem com **peso padrão 0**, com um aviso: a variabilidade já é o outro eixo da matriz (XYZ), e colocá-la no score contaria duas vezes.
+
+### Dois modos de classificação
+
+**Modo 1 — Pontuação ponderada (padrão quando o módulo é ligado)**
+1. **Normalizar** cada critério para 0–1, onde 1 = mais crítico:
+   - Numéricos: **posto percentil** (padrão) = (posição no ranking crescente − 1) ÷ (n − 1), com empates recebendo a média dos postos. É robusto a valores extremos (um item de R$ 1 milhão não achata todos os outros). Alternativa: mín-máx = (x − mín) ÷ (máx − mín).
+   - Critérios "menor = mais crítico" (nº de fornecedores): usar 1 − valor normalizado.
+   - Categóricos: Alta/A/V/5 = 1; Média/B/E/3 = 0,5; Baixa/C/D/1 = 0; escala 1–5 → (x − 1) ÷ 4. Substituto: Não = 1, Sim = 0.
+   - **Dado faltando** para um item: valor neutro 0,5 e aviso de qualidade (não excluir o item, não redistribuir pesos).
+2. **Score** do item: S = Σ (pesoₖ × nₖ), com Σ pesos = 100%.
+3. **Classes:** ordenar por S decrescente. Padrão: **mesma quantidade de itens em A, B e C que o ABC por valor gerou**, o que torna a comparação justa ("quem trocou de lugar com quem"). Alternativas: percentual de itens definido pelo usuário (ex.: 20/30/50) ou cortes de score (ex.: A ≥ 0,60; B ≥ 0,35).
+4. **Regras de piso (opcionais, editáveis):** ex.: "criticidade Alta, sem substituto e lead time > 60 dias → nunca abaixo de B". Mostrar quando uma regra foi aplicada.
+5. **Classe manual** prevalece sobre tudo e fica marcada.
+
+**Modo 2 — Matriz bicritério ABC × Criticidade (VED)** (inspirada em Flores & Whybark)
+Grade 3×3 editável que cruza a classe por valor com a criticidade e devolve a classe final. Padrão:
+
+| | Crítico (V) | Essencial (E) | Desejável (D) |
+|---|---|---|---|
+| **A (valor)** | A | A | B |
+| **B (valor)** | A | B | C |
+| **C (valor)** | B | C | C |
+
+Mais simples de explicar para a diretoria; o modo 1 é mais completo.
+
+### Pesos
+- **Presets** (são pontos de partida, não normas; a tela precisa dizer isso):
+  - Clássico: valor 100%
+  - Produção/MRP: valor 40%, lead time 25%, criticidade 25%, nº de fornecedores 10%
+  - Manutenção (MRO): criticidade 35%, lead time 25%, valor 20%, substituto 10%, nº de fornecedores 10%
+  - Personalizado
+- **Sliders** por critério, com rebalanceamento automático para somar 100%.
+- **Assistente AHP (opcional):** o usuário compara os critérios dois a dois na escala de Saaty (1 a 9: "lead time é quantas vezes mais importante que valor?"). Pesos pela média geométrica das linhas da matriz, normalizada. Consistência: λmáx ≈ média de (A·w)ᵢ ÷ wᵢ; CI = (λmáx − n) ÷ (n − 1); CR = CI ÷ RI, com RI = 0,58 (n=3), 0,90 (4), 1,12 (5), 1,24 (6), 1,32 (7), 1,41 (8), 1,45 (9). Se CR > 0,10, avisar que as comparações estão incoerentes e mostrar o par mais contraditório.
+- Salvar e carregar a configuração de pesos como arquivo .json (para a empresa reaproveitar mês a mês) e lembrar no `localStorage`.
+
+### Efeito no resto da ferramenta
+Com o módulo ligado, a **classe final** substitui a classe por valor na matriz ABC×XYZ, no nível de serviço, nas prioridades de compra, nos KPIs e na planilha. A classe por valor continua visível ao lado, para comparação.
+
+### Interface (dentro da aba ABC-XYZ, alternância "Classificar por: Valor | Multicritério")
+- Painel de pesos (presets, sliders, botão do assistente AHP, regras de piso).
+- **Pré-visualização ao vivo:** "Com esses pesos, 14 itens sobem de classe e 11 descem."
+- Gráfico **Sankey** "ABC por valor → classe final".
+- Tabela **"Quem mudou de classe"** com motivo em texto gerado a partir das maiores contribuições. Ex.: "Subiu de B para A: criticidade Alta (+0,35) e lead time de 90 dias (+0,25) compensam o valor intermediário (+0,11)".
+- No detalhe do item: barra empilhada da contribuição de cada critério para o score e radar com os critérios normalizados.
+- **Estabilidade da classe:** 500 simulações perturbando cada peso em até ±10 p.p. (renormalizando para 100%) e contando em quantas a classe do item se mantém. Mostrar "classe estável em 92% das simulações" e destacar itens instáveis (< 70%), que são os que merecem discussão.
+
+### Saída Excel
+Nova aba **ABC_Multicriterio**: item, cada critério (valor bruto, normalizado, peso, contribuição), score, posição, classe por valor, classe final, regra aplicada, classe manual e justificativa, mudou? (↑/↓), motivo, estabilidade (%). A aba Parametros_Usados registra o modo, os pesos, a normalização, as regras de piso e, se usado, a matriz AHP com o CR.
+
+### Planilha-modelo e dados de demonstração
+- A planilha-modelo ganha as colunas novas (com listas suspensas para criticidade e substituto) e as abas `Equipamentos` e `OndeUsado`.
+- A demo `demo-industria.xlsx` ganha ~25 equipamentos com criticidade variada, a relação OndeUsado e as colunas novas preenchidas, montadas de propósito para que alguns itens de valor médio, lead time longo e máquina crítica subam para A, e alguns itens caros, de entrega rápida e máquina secundária desçam. Assim o Sankey e a tabela "Quem mudou de classe" já impressionam no primeiro clique.
+
+### Testes
+Casos 22 a 28 da seção 13.
 
 ## 17. Decisões registradas
 
@@ -618,3 +716,4 @@ Trabalhar **uma fase por vez**. Ao fim de cada fase: rodar lint, testes e build;
 - [ ] Fase 6 — Exportação (pronta e testada com SheetJS/ExcelJS; falta abrir no Excel desktop do Gabriel sem aviso de reparo)
 - [ ] Fase 7 — Visual e polimento (feito; falta medir Lighthouse ≥ 90 — o npx lighthouse foi bloqueado pela permissão do ambiente)
 - [ ] Fase 8 — Publicação (README, LICENSE, og-image, metatags e workflow prontos; repositório https://github.com/gorc-supply/kit-estoque-mrp; site em https://gorc-supply.github.io/kit-estoque-mrp/)
+- [ ] Fase 9 — ABC multicritério
