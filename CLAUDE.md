@@ -610,7 +610,7 @@ Trabalhar **uma fase por vez**. Ao fim de cada fase: rodar lint, testes e build;
 ## Status
 
 - [x] Fase 0 — Scaffold (TypeScript fixado em ~6.0: o typescript-eslint 8.73 ainda não suporta TS 7; o template do Vite traz oxlint, trocado por ESLint conforme a seção 3)
-- [ ] Fase 1 — Motor de cálculo
+- [x] Fase 1 — Motor de cálculo (73 testes; φ(2,053749) exato = 0,048418, não 0,048424 — ver tests/estatistica.test.ts)
 - [ ] Fase 2 — Entrada de dados
 - [ ] Fase 3 — Interface
 - [ ] Fase 4 — Gráficos e KPIs
