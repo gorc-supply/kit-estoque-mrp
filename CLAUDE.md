@@ -617,4 +617,4 @@ Trabalhar **uma fase por vez**. Ao fim de cada fase: rodar lint, testes e build;
 - [x] Fase 5 — MRP (testes 7 e 8 passam; demo-montagem explode 3 níveis)
 - [ ] Fase 6 — Exportação (pronta e testada com SheetJS/ExcelJS; falta abrir no Excel desktop do Gabriel sem aviso de reparo)
 - [ ] Fase 7 — Visual e polimento (feito; falta medir Lighthouse ≥ 90 — o npx lighthouse foi bloqueado pela permissão do ambiente)
-- [ ] Fase 8 — Publicação (README, LICENSE, og-image, metatags e workflow prontos; falta criar o repositório público, confirmar o usuário do GitHub e fazer o push)
+- [ ] Fase 8 — Publicação (README, LICENSE, og-image, metatags e workflow prontos; repositório https://github.com/gorc-supply/kit-estoque-mrp; site em https://gorc-supply.github.io/kit-estoque-mrp/)

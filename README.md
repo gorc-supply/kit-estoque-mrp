@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/gabriel-cunha-xp/kit-estoque-mrp/actions/workflows/deploy.yml"><img alt="Build" src="https://github.com/gabriel-cunha-xp/kit-estoque-mrp/actions/workflows/deploy.yml/badge.svg" /></a>
+  <a href="https://github.com/gorc-supply/kit-estoque-mrp/actions/workflows/deploy.yml"><img alt="Build" src="https://github.com/gorc-supply/kit-estoque-mrp/actions/workflows/deploy.yml/badge.svg" /></a>
   <a href="LICENSE"><img alt="Licença MIT" src="https://img.shields.io/badge/licen%C3%A7a-MIT-F59E0B" /></a>
   <img alt="100% no navegador" src="https://img.shields.io/badge/dados-100%25%20no%20navegador-16A34A" />
 </p>
@@ -12,7 +12,7 @@
 
 Suba sua planilha de estoque e receba **curva ABC-XYZ, parâmetros de reposição, sugestão de compras e MRP** em segundos — **de graça e sem seus dados saírem do computador**.
 
-### 👉 [Experimente agora](https://gabriel-cunha-xp.github.io/kit-estoque-mrp/) · [abrir já com dados de exemplo](https://gabriel-cunha-xp.github.io/kit-estoque-mrp/?demo=industria)
+### 👉 [Experimente agora](https://gorc-supply.github.io/kit-estoque-mrp/) · [abrir já com dados de exemplo](https://gorc-supply.github.io/kit-estoque-mrp/?demo=industria)
 
 ![Visão geral com KPIs e gráficos](docs/img/visao-geral.png)
 

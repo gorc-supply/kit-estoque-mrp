@@ -11,7 +11,7 @@ import { useTema } from './components/useTema'
 import { useApp } from './estado/contexto'
 import { ProvedorApp } from './estado/ProvedorApp'
 import { ContextoTema, useTemaAtual } from './estado/tema'
-import { URL_REPOSITORIO } from './config'
+import { URL_LINKEDIN, URL_REPOSITORIO } from './config'
 
 // Abas de resultado (com ECharts) carregadas sob demanda: o pacote inicial fica leve.
 const Resultados = lazy(() => import('./pages/Resultados'))
@@ -84,7 +84,7 @@ function Rodape() {
       <p className="mt-2">
         Desenvolvido por Gabriel Cunha ·{' '}
         <a
-          href="https://www.linkedin.com/in/gabriel-cunha-xp"
+          href={URL_LINKEDIN}
           target="_blank"
           rel="noopener noreferrer"
           className="underline hover:text-seguranca"
