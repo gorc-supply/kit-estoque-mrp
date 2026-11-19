@@ -612,9 +612,9 @@ Trabalhar **uma fase por vez**. Ao fim de cada fase: rodar lint, testes e build;
 - [x] Fase 0 — Scaffold (TypeScript fixado em ~6.0: o typescript-eslint 8.73 ainda não suporta TS 7; o template do Vite traz oxlint, trocado por ESLint conforme a seção 3)
 - [x] Fase 1 — Motor de cálculo (73 testes; φ(2,053749) exato = 0,048418, não 0,048424 — ver tests/estatistica.test.ts)
 - [x] Fase 2 — Entrada de dados (SheetJS CE 0.20.3 via tarball oficial; overrides de uuid ^11 para o ExcelJS)
-- [ ] Fase 3 — Interface
-- [ ] Fase 4 — Gráficos e KPIs
-- [ ] Fase 5 — MRP
-- [ ] Fase 6 — Exportação
-- [ ] Fase 7 — Visual e polimento
-- [ ] Fase 8 — Publicação
+- [x] Fase 3 — Interface (TanStack Table v9 + Virtual; ?demo=industria|montagem e ?aba=… abrem direto um exemplo/aba)
+- [x] Fase 4 — Gráficos e KPIs (17 gráficos + histórico, saldo e matriz B; conferidos nos dois temas)
+- [x] Fase 5 — MRP (testes 7 e 8 passam; demo-montagem explode 3 níveis)
+- [ ] Fase 6 — Exportação (pronta e testada com SheetJS/ExcelJS; falta abrir no Excel desktop do Gabriel sem aviso de reparo)
+- [ ] Fase 7 — Visual e polimento (feito; falta medir Lighthouse ≥ 90 — o npx lighthouse foi bloqueado pela permissão do ambiente)
+- [ ] Fase 8 — Publicação (README, LICENSE, og-image, metatags e workflow prontos; falta criar o repositório público, confirmar o usuário do GitHub e fazer o push)
