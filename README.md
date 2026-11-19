@@ -25,6 +25,7 @@ O Kit Estoque MRP faz isso a partir da exportação que você já tem (cadastro 
 ## Funcionalidades
 
 - **Curva ABC** por valor de consumo anualizado (alternativas por quantidade e por valor em estoque), **XYZ** pelo coeficiente de variação e **padrão de demanda de Syntetos-Boylan** (suave, errático, intermitente, irregular), cruzados numa matriz 3×3 clicável com política recomendada por célula.
+- **ABC multicritério** (opcional): combina valor, lead time, criticidade (do item ou dos equipamentos que ele atende), nº de fornecedores, substituto, custo de parada e critérios próprios da empresa (`crit_*`) numa pontuação ponderada por posto percentil, ou na matriz ABC × criticidade (VED). Presets de pesos, sliders, **assistente AHP** com razão de consistência, regras de piso, classe manual com justificativa, **Sankey** "valor → final", tabela "quem mudou de classe e por quê" e **estabilidade** da classe em 500 simulações. A classe final passa a valer em todo o resto.
 - **Previsão** por média móvel (itens suaves/erráticos) ou **SBA — Croston corrigido** (intermitentes), com **backtest** (MAE, RMSE, WMAPE, viés) e modo automático que escolhe o método de menor erro.
 - **Parâmetros de reposição** por item: estoque de segurança (com ou sem variabilidade de prazo), ponto de pedido, lote econômico ajustado a lote mínimo e embalagem, estoque máximo, cobertura e giro.
 - **Sugestão de compras** com prioridade (urgente quando a cobertura não aguenta o lead time), total por fornecedor e exportação só das linhas selecionadas.
@@ -33,7 +34,7 @@ O Kit Estoque MRP faz isso a partir da exportação que você já tem (cadastro 
 - **Qualidade dos dados**: relatório com cada problema e a linha de origem (código sem cadastro, data inválida ou futura, quantidade inválida, tipo desconhecido, duplicidades, saldo reconstruído negativo…).
 - **Mapeamento flexível de colunas**: reconhece sinônimos ("cód.", "SKU", "qtde", "prazo de entrega"…) e, se precisar, pede para você apontar as colunas — e lembra da escolha.
 - **Dashboard** com 14 KPIs clicáveis e 17 gráficos interativos (ECharts), modo claro e escuro, responsivo no celular.
-- **Planilha de saída (.xlsx)** com 10 abas formatadas: Leia-me, Dashboard (com os gráficos), ABC-XYZ, parâmetros, sugestão de compras, MRP semanal e consolidado, alertas, qualidade dos dados e parâmetros usados. Também exporta CSV de qualquer tabela e imprime/salva em PDF.
+- **Planilha de saída (.xlsx)** com 11 abas formatadas: Leia-me, Dashboard (com os gráficos), ABC-XYZ, ABC multicritério, parâmetros, sugestão de compras, MRP semanal e consolidado, alertas, qualidade dos dados e parâmetros usados. Também exporta CSV de qualquer tabela e imprime/salva em PDF.
 
 | ABC-XYZ                                                   | MRP (modo escuro)                                               |
 | --------------------------------------------------------- | --------------------------------------------------------------- |
@@ -47,21 +48,22 @@ O Kit Estoque MRP faz isso a partir da exportação que você já tem (cadastro 
 
 Notação: d̄ = demanda média por período, σ = desvio padrão amostral, F = previsão por período, LTₚ = lead time ÷ dias por período, Z = NORM.S.INV(nível de serviço).
 
-| Conceito             | Fórmula                                                                                 |
-| -------------------- | --------------------------------------------------------------------------------------- |
-| Curva ABC            | classe pelo % acumulado **anterior** do consumo anual (A < 80%, B < 95%)                |
-| XYZ                  | CV = σ ÷ d̄ → X ≤ 0,50; Y ≤ 1,00; Z > 1,00                                               |
-| Syntetos-Boylan      | ADI = n ÷ períodos com demanda; CV² dos tamanhos não nulos (cortes 1,32 e 0,49)         |
-| SBA                  | F = (1 − α/2) · z ÷ p                                                                   |
-| Estoque de segurança | ES = Z · σ · √LTₚ (ou Z · √(LTₚσ² + F²σ_LTₚ²) com variabilidade de prazo)               |
-| Ponto de pedido      | PP = F · LTₚ + ES                                                                       |
-| Lote econômico       | EOQ = √(2DS ÷ H), com H = i · custo; Q* = max(lote mínimo, ⌈EOQ ÷ múltiplo⌉ · múltiplo) |
-| Estoque máximo       | Máx = ES + Q*                                                                           |
-| Sugestão             | Qtd = max(lote mínimo, ⌈(Máx − posição) ÷ múltiplo⌉ · múltiplo) quando posição ≤ PP     |
-| Fill rate            | β = 1 − σ_LT · G(z) ÷ Q*, com G(z) = φ(z) − z(1 − Φ(z))                                 |
-| Giro                 | (consumo em valor anualizado) ÷ (estoque médio reconstruído × custo)                    |
+| Conceito             | Fórmula                                                                                  |
+| -------------------- | ---------------------------------------------------------------------------------------- |
+| Curva ABC            | classe pelo % acumulado **anterior** do consumo anual (A < 80%, B < 95%)                 |
+| XYZ                  | CV = σ ÷ d̄ → X ≤ 0,50; Y ≤ 1,00; Z > 1,00                                                |
+| Syntetos-Boylan      | ADI = n ÷ períodos com demanda; CV² dos tamanhos não nulos (cortes 1,32 e 0,49)          |
+| SBA                  | F = (1 − α/2) · z ÷ p                                                                    |
+| Estoque de segurança | ES = Z · σ · √LTₚ (ou Z · √(LTₚσ² + F²σ_LTₚ²) com variabilidade de prazo)                |
+| Ponto de pedido      | PP = F · LTₚ + ES                                                                        |
+| Lote econômico       | EOQ = √(2DS ÷ H), com H = i · custo; Q* = max(lote mínimo, ⌈EOQ ÷ múltiplo⌉ · múltiplo)  |
+| Estoque máximo       | Máx = ES + Q*                                                                            |
+| Sugestão             | Qtd = max(lote mínimo, ⌈(Máx − posição) ÷ múltiplo⌉ · múltiplo) quando posição ≤ PP      |
+| Fill rate            | β = 1 − σ_LT · G(z) ÷ Q*, com G(z) = φ(z) − z(1 − Φ(z))                                  |
+| Giro                 | (consumo em valor anualizado) ÷ (estoque médio reconstruído × custo)                     |
+| ABC multicritério    | S = Σ pesoₖ × nₖ, com nₖ = posto percentil (posição − 1) ÷ (n − 1); AHP com CR = CI ÷ RI |
 
-A aba **Metodologia** do app explica cada fórmula com exemplo numérico, as decisões de implementação e um glossário. Os casos calculados à mão estão em [`tests/`](tests) (101 testes).
+A aba **Metodologia** do app explica cada fórmula com exemplo numérico, as decisões de implementação e um glossário. Os casos calculados à mão estão em [`tests/`](tests).
 
 ## Formato da planilha de entrada
 
@@ -70,6 +72,7 @@ Baixe a **planilha-modelo** no app (tem instruções, exemplo e listas suspensas
 - **Materiais** (obrigatória): `codigo`, `descricao`, `unidade`, `estoque_atual`, `lead_time_dias` + opcionais `custo_unitario`, `desvio_lead_time_dias`, `lote_minimo`, `multiplo_compra`, `estoque_seguranca_manual`, `fornecedor`, `categoria`, `tipo_item`, `data_cadastro`.
 - **Movimentacoes** (obrigatória): `data`, `codigo`, `tipo` (Entrada, Saída, Ajuste +, Ajuste -, Devolução ao estoque, Devolução ao fornecedor), `quantidade` + opcionais `valor_total`, `documento`. Só **Saída** conta como consumo.
 - Opcionais: **PedidosAbertos** (`codigo`, `data_prevista`, `quantidade`), **BOM** (`codigo_pai`, `codigo_filho`, `quantidade_por`, `perda_pct`) e **MPS** (`codigo`, `semana_inicio`, `quantidade`).
+- ABC multicritério (tudo opcional): colunas `criticidade`, `num_fornecedores`, `possui_substituto`, `custo_parada_hora`, `classe_manual`, `justificativa_classe` e `crit_<nome>` em Materiais, e as abas **Equipamentos** (`equipamento`, `criticidade`, `setor`) e **OndeUsado** (`codigo`, `equipamento`).
 
 Aceita .xlsx ou um .csv por aba (separador `;` ou `,`, UTF-8 ou Windows-1252), datas do Excel, dd/mm/aaaa ou aaaa-mm-dd, e números no formato brasileiro.
 

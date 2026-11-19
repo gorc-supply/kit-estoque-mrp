@@ -35,7 +35,31 @@ export interface Material {
   categoria?: string
   tipoItem?: TipoItem
   dataCadastro?: Date
+  // --- ABC multicritério (seção 16-B), todos opcionais
+  /** Texto ou número como veio da planilha: Alta/Média/Baixa, A/B/C, V/E/D ou 1–5. */
+  criticidade?: string | number
+  numFornecedores?: number
+  /** true = possui substituto; false = não possui; undefined = não informado. */
+  possuiSubstituto?: boolean
+  custoParadaHora?: number
+  classeManual?: ClasseABC
+  justificativaClasse?: string
+  /** Critérios próprios da empresa (colunas crit_<nome>), por nome sem o prefixo. */
+  criterios?: Record<string, number>
   /** Linha de origem na planilha (1 = cabeçalho). */
+  linha?: number
+}
+
+export interface Equipamento {
+  equipamento: string
+  criticidade?: string | number
+  setor?: string
+  linha?: number
+}
+
+export interface OndeUsado {
+  codigo: string
+  equipamento: string
   linha?: number
 }
 
@@ -85,6 +109,9 @@ export interface Entrada {
   pedidosAbertos: PedidoAberto[]
   bom: ItemBOM[]
   mps: ItemMPS[]
+  /** Abas opcionais do ABC multicritério (seção 16-B). */
+  equipamentos?: Equipamento[]
+  ondeUsado?: OndeUsado[]
   /** Problemas detectados na leitura (io/), somados ao relatório de qualidade. */
   problemasLeitura?: ProblemaQualidade[]
 }
@@ -132,6 +159,61 @@ export interface Parametros {
   nivelServico: MatrizNivelServico
   /** Lead time usado quando o item não tem (com aviso). */
   leadTimePadraoDias: number
+  /** ABC multicritério (seção 16-B). Desligado por padrão. */
+  multicriterio: ConfigMulticriterio
+}
+
+// ---------------------------------------------------------------------------
+// ABC multicritério (seção 16-B)
+
+export type ModoMulticriterio = 'ponderado' | 'ved'
+export type Normalizacao = 'posto' | 'minmax'
+export type MetodoClasses = 'mesma_contagem' | 'percentual' | 'cortes'
+export type ClasseVED = 'V' | 'E' | 'D'
+/** valor, lead_time, cv, equipamentos, criticidade, fornecedores, substituto, custo_parada ou crit_<nome>. */
+export type IdCriterio = string
+
+export interface RegraPiso {
+  id: string
+  ativa: boolean
+  /** Criticidade mínima (0–1: Alta = 1, Média = 0,5); null = não exige. */
+  criticidadeMin: number | null
+  semSubstituto: boolean
+  /** Lead time estritamente maior que (dias); null = não exige. */
+  leadTimeMaiorQue: number | null
+  classeMinima: 'A' | 'B'
+}
+
+export interface ResultadoAHP {
+  criterios: IdCriterio[]
+  matriz: number[][]
+  pesos: number[]
+  lambdaMax: number
+  ci: number
+  cr: number
+}
+
+export interface ConfigMulticriterio {
+  ativo: boolean
+  modo: ModoMulticriterio
+  normalizacao: Normalizacao
+  /** Pesos por critério (frações; o motor renormaliza para somar 1). */
+  pesos: Record<IdCriterio, number>
+  /** Direção dos critérios crit_<nome>: 'maior' (padrão) ou 'menor' = mais crítico. */
+  direcoes: Record<IdCriterio, 'maior' | 'menor'>
+  metodoClasses: MetodoClasses
+  /** Frações de itens em A e B (método percentual). */
+  percentuais: { A: number; B: number }
+  /** Cortes de score (método cortes): A ≥ A; B ≥ B. */
+  cortes: { A: number; B: number }
+  regras: RegraPiso[]
+  /** Matriz VED: classe final por classe de valor × criticidade. */
+  matrizVED: Record<ClasseABC, Record<ClasseVED, ClasseABC>>
+  simulacoes: number
+  /** Perturbação máxima de cada peso nas simulações (fração: 0,10 = ±10 p.p.). */
+  perturbacao: number
+  /** Última matriz AHP aplicada (para registro na planilha). */
+  ahp: ResultadoAHP | null
 }
 
 // ---------------------------------------------------------------------------
@@ -160,6 +242,10 @@ export type RegraQualidade =
   | 'mps_invalido'
   | 'coluna_ausente'
   | 'leitura'
+  | 'mc_dado_faltando'
+  | 'mc_criticidade_invalida'
+  | 'mc_manual_sem_justificativa'
+  | 'mc_onde_usado_invalido'
 
 export interface ProblemaQualidade {
   regra: RegraQualidade
@@ -264,6 +350,10 @@ export interface ItemResultado {
   posicaoABC: number
   classeABCQuantidade: ClasseABC
   classeABCValorEstoque: ClasseABC
+  /** Classe pelo valor de consumo (ABC clássico). Com o multicritério desligado, = classeABC. */
+  classeABCValor: ClasseABC
+  /** Detalhe do ABC multicritério (null com o módulo desligado). */
+  multicriterio: ItemMulticriterio | null
 
   // XYZ (6.5)
   classeXYZ: ClasseXYZ
@@ -335,6 +425,52 @@ export interface ItemResultado {
 
   // Similaridade (6.12g)
   parecidos: { codigo: string; similaridade: number }[]
+}
+
+export interface CriterioDoItem {
+  id: IdCriterio
+  nome: string
+  /** Valor bruto (número, rótulo de criticidade, Sim/Não) ou null se faltou. */
+  bruto: number | string | null
+  /** Valor normalizado 0–1 (1 = mais crítico); 0,5 quando faltou. */
+  normalizado: number
+  peso: number
+  contribuicao: number
+  faltando: boolean
+}
+
+export interface ItemMulticriterio {
+  score: number | null
+  /** Posição pelo score (1 = mais crítico); null no modo VED. */
+  posicao: number | null
+  criterios: CriterioDoItem[]
+  /** Criticidade efetiva (0–1) e seu rótulo; null se não informada. */
+  criticidade: number | null
+  ved: ClasseVED
+  equipamentos: string[]
+  classeValor: ClasseABC
+  /** Classe antes da regra de piso e da classe manual. */
+  classeCalculada: ClasseABC
+  classeFinal: ClasseABC
+  regraAplicada: string | null
+  manual: boolean
+  justificativa: string | null
+  mudou: 'subiu' | 'desceu' | null
+  motivo: string
+  /** Fração das simulações em que a classe se manteve (null no modo VED). */
+  estabilidade: number | null
+}
+
+export interface ResumoMulticriterio {
+  config: ConfigMulticriterio
+  /** Pesos efetivos (renormalizados) por critério. */
+  pesos: Record<IdCriterio, number>
+  criterios: { id: IdCriterio; nome: string; itensComDado: number; direcao: 'maior' | 'menor' }[]
+  subiram: number
+  desceram: number
+  instaveis: number
+  /** Fluxos classe por valor → classe final (para o Sankey). */
+  fluxos: { de: ClasseABC; para: ClasseABC; itens: number }[]
 }
 
 export interface LinhaMRP {
@@ -451,6 +587,8 @@ export interface Resultado {
   /** Erro amigável do MRP (ex.: BOM circular); o restante do cálculo segue. */
   erroMRP: string | null
   consolidado: SerieConsolidada
+  /** Resumo do ABC multicritério (null com o módulo desligado). */
+  multicriterio: ResumoMulticriterio | null
   tempoMs: number
 }
 

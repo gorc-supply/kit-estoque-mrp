@@ -5,7 +5,19 @@ import { gerarDemoIndustria, gerarDemoMontagem } from '../scripts/demo/dados'
 import { escreverDemo } from '../scripts/demo/escrever'
 import { arredondarQuantidade } from '../src/engine/estatistica'
 import { processar, sugestoesOrdenadas, type Resultado } from '../src/engine/index'
-import { ABAS_SAIDA, exportarExcel, nomeArquivoSaida } from '../src/io/exportar-excel'
+import {
+  completarConfigMC,
+  matrizReciproca,
+  nomeCriterio,
+  registroAHP,
+} from '../src/engine/multicriterio'
+import type { Entrada, Parametros } from '../src/engine/tipos'
+import {
+  ABAS_SAIDA,
+  exportarExcel,
+  MENSAGEM_MC_DESLIGADO,
+  nomeArquivoSaida,
+} from '../src/io/exportar-excel'
 import { lerEntrada } from '../src/io/ler-planilha'
 
 // PNG 1×1 transparente.
@@ -179,6 +191,17 @@ describe('Exportação Excel — demo-industria', () => {
     expect(pu[cab + 1]).toEqual(['A', 0.98, 0.97, 0.95])
   })
 
+  it('ABC_Multicriterio com o módulo desligado: só a mensagem', () => {
+    expect(r.multicriterio).toBeNull()
+    expect(linhasSheetJS(wbX, 'ABC_Multicriterio')).toEqual([[MENSAGEM_MC_DESLIGADO]])
+    // ABC-XYZ sem a coluna "Classe por valor".
+    expect(linhasSheetJS(wbX, 'ABC-XYZ')[0]).not.toContain('Classe por valor')
+    const pu = linhasSheetJS(wbX, 'Parametros_Usados')
+    const k = pu.findIndex((l) => l[0] === 'ABC multicritério')
+    expect(k).toBeGreaterThan(0)
+    expect(pu[k + 1].slice(0, 2)).toEqual(['Ligado', 'Não'])
+  })
+
   it('Dashboard sem imagens e Leia-me com link', () => {
     const dash = wbJS.getWorksheet('Dashboard')!
     expect(dash.getImages()).toHaveLength(0)
@@ -188,6 +211,194 @@ describe('Exportação Excel — demo-industria', () => {
     expect(leia).toContain('https://exemplo.github.io/kit')
     expect(leia).toContain('demo-industria.xlsx')
   })
+})
+
+describe('Exportação Excel — ABC multicritério', () => {
+  let entrada: Entrada
+
+  beforeAll(async () => {
+    const b = await escreverDemo(ExcelJS, gerarDemoIndustria(), 'teste')
+    entrada = lerEntrada([{ nome: 'demo-industria.xlsx', dados: b }])
+  }, 60_000)
+
+  async function exportarMC(mc: Partial<Parametros['multicriterio']>) {
+    const r = processar(entrada, { multicriterio: completarConfigMC({ ativo: true, ...mc }) })
+    const buf = await exportarExcel(ExcelJS, r, OPCOES)
+    return { r, wbJS: await reabrirExcelJS(buf), wbX: XLSX.read(buf, { type: 'array' }) }
+  }
+
+  it('modo ponderado: uma linha por item, critérios, score e classe final do motor', async () => {
+    const { r, wbJS, wbX } = await exportarMC({})
+    const mc = r.multicriterio!
+    expect(mc).not.toBeNull()
+    conferirEstrutura(wbJS)
+
+    const linhas = linhasSheetJS(wbX, 'ABC_Multicriterio')
+    const cab = linhas[0] as string[]
+    expect(linhas.length).toBe(r.itens.length + 1)
+    // Quatro colunas por critério, na ordem dos pesos efetivos.
+    const ids = Object.keys(mc.pesos)
+    expect(ids.length).toBeGreaterThan(0)
+    ids.forEach((id, k) => {
+      expect(cab[3 + 4 * k]).toBe(`${nomeCriterio(id)} (normalizado)`)
+      expect(cab[4 + 4 * k]).toBe(`${nomeCriterio(id)} (peso)`)
+      expect(cab[5 + 4 * k]).toBe(`${nomeCriterio(id)} (contribuição)`)
+    })
+    const col = (nome: string) => cab.indexOf(nome)
+    const cScore = col('Score')
+    const cPos = col('Posição')
+    const cFinal = col('Classe final')
+    const cValor = col('Classe por valor')
+    const cEstab = col('Estabilidade')
+    expect(cScore).toBe(2 + 4 * ids.length)
+
+    // Ordenada pela posição do score.
+    expect(linhas.slice(1).map((l) => l[cPos])).toEqual(r.itens.map((_, k) => k + 1))
+
+    const porCodigo = new Map(r.itens.map((i) => [i.codigo, i]))
+    for (const l of linhas.slice(1)) {
+      const item = porCodigo.get(l[0] as string)!
+      const m = item.multicriterio!
+      expect(l[cScore] as number).toBeCloseTo(m.score!, 9)
+      expect(l[cFinal]).toBe(item.classeABC)
+      expect(l[cFinal]).toBe(m.classeFinal)
+      expect(l[cValor]).toBe(item.classeABCValor)
+    }
+    // Contribuição de um critério = peso × normalizado, como no motor.
+    const item = porCodigo.get(linhas[1][0] as string)!
+    const c0 = item.multicriterio!.criterios.find((c) => c.id === ids[0])!
+    expect(linhas[1][3] as number).toBeCloseTo(c0.normalizado, 9)
+    expect(linhas[1][5] as number).toBeCloseTo(c0.contribuicao, 9)
+
+    // Estabilidade < 70% destacada com preenchimento direto; classe final colorida.
+    const ws = wbJS.getWorksheet('ABC_Multicriterio')!
+    linhas.slice(1).forEach((l, k) => {
+      const est = l[cEstab] as number
+      const fill = ws.getCell(k + 2, cEstab + 1).fill as ExcelJS.FillPattern | undefined
+      if (est < 0.7) expect(fill?.fgColor?.argb).toBe('FFFECACA')
+      else expect(fill?.fgColor?.argb).toBeUndefined()
+    })
+    const finalA = linhas.findIndex((l) => l[cFinal] === 'A')
+    expect((ws.getCell(finalA + 1, cFinal + 1).fill as ExcelJS.FillPattern).fgColor?.argb).toBe(
+      'FF1D4ED8',
+    )
+
+    // ABC-XYZ ganha a coluna "Classe por valor" ao lado da classe.
+    const abc = linhasSheetJS(wbX, 'ABC-XYZ')
+    expect(abc[0][9]).toBe('Classe ABC (final)')
+    expect(abc[0][10]).toBe('Classe por valor')
+    for (const l of abc.slice(1)) {
+      const i = porCodigo.get(l[0] as string)!
+      expect(l[9]).toBe(i.classeABC)
+      expect(l[10]).toBe(i.classeABCValor)
+    }
+
+    // Parametros_Usados: bloco ligado, modo e pesos efetivos.
+    const pu = linhasSheetJS(wbX, 'Parametros_Usados')
+    const k = pu.findIndex((l) => l[0] === 'ABC multicritério')
+    expect(pu[k + 1].slice(0, 2)).toEqual(['Ligado', 'Sim'])
+    expect(pu.some((l) => l[0] === 'Modo' && l[1] === 'Pontuação ponderada')).toBe(true)
+    expect(pu.some((l) => l[0] === 'Normalização' && l[1] === 'Posto percentil')).toBe(true)
+    const kp = pu.findIndex((l) => String(l[0]).startsWith('Pesos dos critérios'))
+    expect(kp).toBeGreaterThan(k)
+    for (const id of ids) {
+      const l = pu.slice(kp).find((x) => x[0] === nomeCriterio(id))!
+      expect(l[1] as number).toBeCloseTo(mc.pesos[id], 9)
+    }
+    const kr = pu.findIndex((l) => l[0] === 'Regras de piso')
+    expect(kr).toBeGreaterThan(kp)
+    expect(pu.some((l) => l[1] === 'Não' && String(l[0]).includes('nunca abaixo de B'))).toBe(true)
+
+    // Leia-me cita a nova aba.
+    expect(linhasSheetJS(wbX, 'Leia-me').flat()).toContain('ABC_Multicriterio')
+  }, 60_000)
+
+  it('modo VED: criticidade, VED e classes, ordenado pela classe final', async () => {
+    const { r, wbJS, wbX } = await exportarMC({ modo: 'ved' })
+    conferirEstrutura(wbJS)
+    const linhas = linhasSheetJS(wbX, 'ABC_Multicriterio')
+    expect(linhas[0].slice(0, 6)).toEqual([
+      'Item',
+      'Descrição',
+      'Criticidade',
+      'VED',
+      'Classe por valor',
+      'Classe final',
+    ])
+    expect(linhas[0]).not.toContain('Score')
+    expect(linhas.length).toBe(r.itens.length + 1)
+    const finais = linhas.slice(1).map((l) => l[5] as string)
+    expect(finais).toEqual([...finais].sort())
+    const porCodigo = new Map(r.itens.map((i) => [i.codigo, i]))
+    for (const l of linhas.slice(1)) {
+      const i = porCodigo.get(l[0] as string)!
+      expect(l[5]).toBe(i.classeABC)
+      expect(['Vital', 'Essencial', 'Desejável']).toContain(l[3])
+    }
+    const pu = linhasSheetJS(wbX, 'Parametros_Usados')
+    const kv = pu.findIndex((l) => l[0] === 'Matriz ABC por valor × criticidade (VED)')
+    expect(kv).toBeGreaterThan(0)
+    expect(pu[kv + 1]).toEqual(['Classe por valor', 'Vital (V)', 'Essencial (E)', 'Desejável (D)'])
+    expect(pu[kv + 2]).toEqual(['A', 'A', 'A', 'B'])
+    expect(pu[kv + 4]).toEqual(['C', 'B', 'C', 'C'])
+    expect(pu.some((l) => String(l[0]).startsWith('Pesos dos critérios'))).toBe(false)
+  }, 60_000)
+
+  it('AHP registrado: matriz, pesos, λmáx, CI e CR (com aviso se CR > 0,10)', async () => {
+    const criterios = ['valor', 'lead_time', 'criticidade']
+    const nomes = criterios.map(nomeCriterio)
+
+    // Comparações incoerentes: valor > lead time > criticidade > valor.
+    const incoerente = registroAHP(
+      criterios,
+      matrizReciproca(3, (i, j) => (i === 0 && j === 2 ? 1 / 5 : 3)),
+    )
+    expect(incoerente.cr).toBeGreaterThan(0.1)
+    const pesos = Object.fromEntries(criterios.map((id, k) => [id, incoerente.pesos[k]]))
+    const { r, wbJS, wbX } = await exportarMC({ pesos, ahp: incoerente })
+    conferirEstrutura(wbJS)
+    for (const [k, id] of criterios.entries())
+      expect(r.multicriterio!.pesos[id]).toBeCloseTo(incoerente.pesos[k], 9)
+
+    const pu = linhasSheetJS(wbX, 'Parametros_Usados')
+    const ka = pu.findIndex((l) => String(l[0]).startsWith('Assistente AHP'))
+    expect(ka).toBeGreaterThan(0)
+    expect(pu[ka + 1]).toEqual(['Critério', ...nomes, 'Peso AHP'])
+    for (let i = 0; i < 3; i++) {
+      expect(pu[ka + 2 + i][0]).toBe(nomes[i])
+      for (let j = 0; j < 3; j++)
+        expect(pu[ka + 2 + i][1 + j] as number).toBeCloseTo(incoerente.matriz[i][j], 6)
+      expect(pu[ka + 2 + i][4] as number).toBeCloseTo(incoerente.pesos[i], 9)
+    }
+    const lambda = pu.find((l) => l[0] === 'λmáx')!
+    expect(lambda[1] as number).toBeCloseTo(incoerente.lambdaMax, 9)
+    expect(pu.find((l) => l[0] === 'CI')![1] as number).toBeCloseTo(incoerente.ci, 9)
+    const cr = pu.find((l) => l[0] === 'CR')!
+    expect(cr[1] as number).toBeCloseTo(incoerente.cr, 9)
+    expect(String(cr[2])).toContain('CR > 0,10: comparações incoerentes')
+    expect(pu.indexOf(cr)).toBeGreaterThan(ka)
+    // CR com 3 casas e destacado por preenchimento direto (não formatação condicional).
+    const ws = wbJS.getWorksheet('Parametros_Usados')!
+    let linhaCR = 0
+    ws.eachRow((row, numero) => {
+      if (row.getCell(1).value === 'CR') linhaCR = numero
+    })
+    expect(ws.getCell(linhaCR, 2).numFmt).toBe('0.000')
+    expect((ws.getCell(linhaCR, 2).fill as ExcelJS.FillPattern).fgColor?.argb).toBe('FFFECACA')
+
+    // Comparações coerentes (aᵢⱼ = wᵢ ÷ wⱼ): CR = 0, sem aviso.
+    const w = [0.5, 0.3, 0.2]
+    const coerente = registroAHP(
+      criterios,
+      matrizReciproca(3, (i, j) => w[i] / w[j]),
+    )
+    const pesosC = Object.fromEntries(criterios.map((id, k) => [id, coerente.pesos[k]]))
+    const res = await exportarMC({ pesos: pesosC, ahp: coerente })
+    const puC = linhasSheetJS(res.wbX, 'Parametros_Usados')
+    const crC = puC.find((l) => l[0] === 'CR')!
+    expect(crC[1] as number).toBeCloseTo(0, 9)
+    expect(String(crC[2])).not.toContain('incoerentes')
+  }, 60_000)
 })
 
 describe('Exportação Excel — demo-montagem (BOM + MPS)', () => {

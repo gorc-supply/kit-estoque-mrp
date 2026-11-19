@@ -1,5 +1,6 @@
 // "Ver o cálculo": passo a passo de cada número do item, com fórmula, valores e resultado.
 
+import { NOME_VED, rotuloCriticidade } from '../engine/multicriterio'
 import type { ItemResultado, Resultado } from '../engine/tipos'
 import { data, dias, moeda, num, numFixo, pct, qtd } from './formato'
 
@@ -110,6 +111,83 @@ export function montarCalculo(i: ItemResultado, r: Resultado): GrupoPassos[] {
         : []),
     ],
   })
+
+  // 2-B. ABC multicritério (seção 16-B)
+  const mc = i.multicriterio
+  if (mc && r.multicriterio) {
+    const cfg = r.multicriterio.config
+    const passosMC: Passo[] = []
+    if (mc.score !== null) {
+      mc.criterios.forEach((k, idx) => {
+        const invertido = k.id === 'fornecedores' ? ', invertido (menor = mais crítico)' : ''
+        passosMC.push({
+          titulo: `Critério: ${k.nome}`,
+          formula:
+            k.id === 'criticidade' || k.id === 'substituto'
+              ? 'categórico: Alta / sem substituto = 1 · Média = 0,5 · Baixa / com substituto = 0'
+              : cfg.normalizacao === 'minmax'
+                ? `mín-máx = (x − mín) ÷ (máx − mín)${invertido}`
+                : `posto percentil = (posição − 1) ÷ (n − 1)${invertido}`,
+          conta: k.faltando
+            ? 'dado faltando: valor neutro 0,5'
+            : `bruto ${typeof k.bruto === 'number' ? num(k.bruto, 2) : k.bruto} → normalizado ${numFixo(k.normalizado, 3)}; peso ${pct(k.peso, 1)}`,
+          resultado: `contribuição +${numFixo(k.contribuicao, 3)}`,
+          ancora: idx === 0 ? 'multicriterio' : undefined,
+        })
+      })
+      passosMC.push({
+        titulo: 'Score multicritério',
+        formula: 'S = Σ pesoₖ × normalizadoₖ',
+        conta: mc.criterios
+          .map((k) => `${pct(k.peso, 0)} × ${numFixo(k.normalizado, 2)}`)
+          .join(' + '),
+        resultado: `S = ${numFixo(mc.score, 3)} → posição ${mc.posicao}`,
+      })
+      passosMC.push({
+        titulo: 'Classe calculada',
+        formula:
+          cfg.metodoClasses === 'mesma_contagem'
+            ? 'mesma quantidade de A/B/C do ABC por valor, pela ordem do score'
+            : cfg.metodoClasses === 'percentual'
+              ? `${pct(cfg.percentuais.A, 0)} dos itens em A e ${pct(cfg.percentuais.B, 0)} em B, pela ordem do score`
+              : `A se S ≥ ${numFixo(cfg.cortes.A, 2)}; B se S ≥ ${numFixo(cfg.cortes.B, 2)}`,
+        conta: `classe por valor ${mc.classeValor}`,
+        resultado: `classe calculada ${mc.classeCalculada}`,
+        nota:
+          mc.estabilidade !== null
+            ? `Estável em ${pct(mc.estabilidade, 0)} das ${cfg.simulacoes} simulações com pesos perturbados em até ±${num(cfg.perturbacao * 100)} p.p.`
+            : undefined,
+      })
+    } else {
+      passosMC.push({
+        titulo: 'Matriz VED',
+        formula: 'classe final = matriz[classe por valor][V/E/D]',
+        conta: `valor ${mc.classeValor} × criticidade ${rotuloCriticidade(mc.criticidade)} (${NOME_VED[mc.ved]})`,
+        resultado: `classe ${mc.classeCalculada}`,
+        ancora: 'multicriterio',
+      })
+    }
+    if (mc.regraAplicada || mc.manual) {
+      passosMC.push({
+        titulo: mc.manual ? 'Classe manual' : 'Regra de piso',
+        formula: mc.manual
+          ? 'classe_manual do cadastro prevalece sobre tudo'
+          : (mc.regraAplicada ?? ''),
+        conta: mc.manual
+          ? (mc.justificativa ?? 'sem justificativa')
+          : `calculada ${mc.classeCalculada}`,
+        resultado: `classe final ${mc.classeFinal}`,
+      })
+    }
+    passosMC.push({
+      titulo: 'Resultado',
+      formula:
+        'a classe final substitui a de valor no nível de serviço, nas prioridades e nos KPIs',
+      conta: mc.motivo,
+      resultado: `classe final ${mc.classeFinal}`,
+    })
+    grupos.push({ titulo: 'Classificação multicritério', passos: passosMC })
+  }
 
   // 3. Previsão
   grupos.push({

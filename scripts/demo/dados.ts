@@ -16,6 +16,20 @@ export interface MaterialDemo {
   categoria: string
   tipo_item: 'Comprado' | 'Fabricado'
   data_cadastro: Date | null
+  // ABC multicritério (seção 16-B), todos opcionais
+  criticidade: string | null
+  num_fornecedores: number | null
+  possui_substituto: 'Sim' | 'Não' | null
+  custo_parada_hora: number | null
+  classe_manual: 'A' | 'B' | 'C' | null
+  justificativa_classe: string | null
+  crit_seguranca: number | null
+}
+
+export interface EquipamentoDemo {
+  equipamento: string
+  criticidade: 'Alta' | 'Média' | 'Baixa'
+  setor: string
 }
 
 export interface MovimentoDemo {
@@ -39,7 +53,20 @@ export interface DadosDemo {
   pedidos: PedidoDemo[]
   bom: { codigo_pai: string; codigo_filho: string; quantidade_por: number; perda_pct: number }[]
   mps: { codigo: string; semana_inicio: Date; quantidade: number }[]
+  equipamentos: EquipamentoDemo[]
+  ondeUsado: { codigo: string; equipamento: string }[]
 }
+
+/** Campos do multicritério vazios (itens sem esses dados). */
+const SEM_MC = {
+  criticidade: null,
+  num_fornecedores: null,
+  possui_substituto: null,
+  custo_parada_hora: null,
+  classe_manual: null,
+  justificativa_classe: null,
+  crit_seguranca: null,
+} as const
 
 // ---------------------------------------------------------------------------
 // Aleatoriedade determinística
@@ -80,6 +107,8 @@ const DIA = 86_400_000
 const utc = (a: number, m: number, d: number) => new Date(Date.UTC(a, m - 1, d))
 const somarDias = (d: Date, n: number) => new Date(d.getTime() + n * DIA)
 const r2 = (x: number) => Math.round(x * 100) / 100
+/** Devoluções no último dia não podem passar da data-base (31/10/2026). */
+const ateDataBase = (d: Date) => (d > DATA_BASE_DEMO ? DATA_BASE_DEMO : d)
 
 const FRACIONAVEIS = new Set(['KG', 'L', 'M', 'M2'])
 
@@ -388,6 +417,7 @@ function montarCatalogo(rng: Rng): Especificacao[] {
             categoria,
             tipo_item: 'Comprado',
             data_cadastro: null,
+            ...SEM_MC,
           },
           padrao: 'suave',
           mediaMensal,
@@ -439,6 +469,179 @@ function ajustarMultiplo(q: number, lote: number | null, mult: number | null): n
   return Math.max(lote ?? 0, Math.ceil(q / m) * m)
 }
 
+// ---------------------------------------------------------------------------
+// ABC multicritério (seção 16-B): equipamentos, onde usado e colunas novas.
+
+const EQUIPAMENTOS_DEMO: EquipamentoDemo[] = [
+  { equipamento: 'Prensa hidráulica PH-01', criticidade: 'Alta', setor: 'Estamparia' },
+  { equipamento: 'Prensa excêntrica PE-02', criticidade: 'Alta', setor: 'Estamparia' },
+  { equipamento: 'Torno CNC TC-01', criticidade: 'Alta', setor: 'Usinagem' },
+  { equipamento: 'Centro de usinagem CU-01', criticidade: 'Alta', setor: 'Usinagem' },
+  { equipamento: 'Robô de solda RS-01', criticidade: 'Alta', setor: 'Solda' },
+  { equipamento: 'Compressor de ar CA-01', criticidade: 'Alta', setor: 'Utilidades' },
+  { equipamento: 'Cabine de pintura CP-01', criticidade: 'Alta', setor: 'Pintura' },
+  { equipamento: 'Estufa de cura EC-01', criticidade: 'Alta', setor: 'Pintura' },
+  { equipamento: 'Torno CNC TC-02', criticidade: 'Média', setor: 'Usinagem' },
+  { equipamento: 'Fresadora FR-01', criticidade: 'Média', setor: 'Usinagem' },
+  { equipamento: 'Máquina de solda MIG MS-02', criticidade: 'Média', setor: 'Solda' },
+  { equipamento: 'Máquina de solda MIG MS-03', criticidade: 'Média', setor: 'Solda' },
+  { equipamento: 'Guilhotina GU-01', criticidade: 'Média', setor: 'Estamparia' },
+  { equipamento: 'Dobradeira DB-01', criticidade: 'Média', setor: 'Estamparia' },
+  { equipamento: 'Ponte rolante PR-01', criticidade: 'Média', setor: 'Expedição' },
+  { equipamento: 'Compressor de ar CA-02', criticidade: 'Média', setor: 'Utilidades' },
+  { equipamento: 'Transportador de correia TR-01', criticidade: 'Média', setor: 'Expedição' },
+  { equipamento: 'Empilhadeira EM-02', criticidade: 'Baixa', setor: 'Expedição' },
+  { equipamento: 'Esmerilhadeira de bancada EB-01', criticidade: 'Baixa', setor: 'Manutenção' },
+  { equipamento: 'Furadeira de coluna FC-01', criticidade: 'Baixa', setor: 'Manutenção' },
+  { equipamento: 'Serra fita SF-01', criticidade: 'Baixa', setor: 'Usinagem' },
+  { equipamento: 'Lavadora de peças LP-01', criticidade: 'Baixa', setor: 'Manutenção' },
+  { equipamento: 'Seladora de caixas SC-01', criticidade: 'Baixa', setor: 'Expedição' },
+  { equipamento: 'Bomba de recalque BR-01', criticidade: 'Baixa', setor: 'Utilidades' },
+  { equipamento: 'Ventilador industrial VI-01', criticidade: 'Baixa', setor: 'Utilidades' },
+]
+
+/**
+ * Preenche as colunas do multicritério e monta Equipamentos/OndeUsado. Montado de propósito
+ * para o preset Produção/MRP mexer nas classes: ~10 itens de valor intermediário, lead time
+ * longo, fonte única, sem substituto e em máquina crítica sobem; ~8 itens caros, de entrega
+ * rápida, com vários fornecedores, substituto e só em máquinas secundárias descem.
+ * Roda ANTES da simulação de movimentos (o lead time novo entra na reposição simulada).
+ * Usa um gerador próprio para não embaralhar o restante da demo.
+ */
+function aplicarMulticriterio(
+  specs: Especificacao[],
+  excluidos: ReadonlySet<number>,
+  semente: number,
+): Pick<DadosDemo, 'equipamentos' | 'ondeUsado'> {
+  const rng = criarRng(semente)
+  const porCrit = (c: EquipamentoDemo['criticidade']) =>
+    EQUIPAMENTOS_DEMO.filter((e) => e.criticidade === c).map((e) => e.equipamento)
+  const alta = porCrit('Alta')
+  const media = porCrit('Média')
+  const baixa = porCrit('Baixa')
+  const critDe = new Map(EQUIPAMENTOS_DEMO.map((e) => [e.equipamento, e.criticidade]))
+
+  const elegivel = (i: number) => {
+    const s = specs[i]
+    return (
+      !excluidos.has(i) &&
+      !s.ruptura &&
+      !s.excesso &&
+      !s.semValor &&
+      s.mesInicio === 0 &&
+      s.padrao !== 'parado' &&
+      s.m.custo_unitario !== null &&
+      Number.isFinite(s.m.lead_time_dias)
+    )
+  }
+  // Classe manual: item de segurança de máquina (NR-12).
+  const manual = specs.findIndex((s) => s.m.descricao.startsWith('Chave fim de curso'))
+
+  // Ranking pelo valor anual esperado (demanda média × custo × 12).
+  const valor = (i: number) => specs[i].mediaMensal * specs[i].custoReal * 12
+  const ranking = specs.map((_, i) => i).sort((a, b) => valor(b) - valor(a))
+  const n = specs.length
+  const descem = ranking.filter((i) => elegivel(i) && i !== manual).slice(0, 8)
+  // Sobem: peças de máquina em que prazo longo e fonte única são plausíveis (importadas,
+  // específicas do equipamento), com valor no meio do ranking.
+  const pecaDeMaquina =
+    /^(Rolamento|Retentor|Correia|Contator|Relé|Filtro|Mangueira hidráulica|Sensor|Válvula|Cilindro|Motor|Redutor|Inversor|CLP|Engate|Mola)/
+  const candidatosSobe = ranking.filter(
+    (i, pos) =>
+      pos >= 0.25 * n &&
+      pos < 0.8 * n &&
+      elegivel(i) &&
+      i !== manual &&
+      pecaDeMaquina.test(specs[i].m.descricao),
+  )
+  const sobem: number[] = []
+  for (let k = 0; k < 10 && candidatosSobe.length; k++)
+    sobem.push(candidatosSobe[Math.floor((k * candidatosSobe.length) / 10)])
+  const setSobe = new Set(sobem)
+  const setDesce = new Set(descem)
+
+  const ondeUsado: DadosDemo['ondeUsado'] = []
+  const vincular = (i: number, lista: string[]) => {
+    for (const e of new Set(lista)) ondeUsado.push({ codigo: specs[i].m.codigo, equipamento: e })
+  }
+  const ajustarLT = (s: Especificacao, lt: number) => {
+    s.m.lead_time_dias = lt
+    if (s.m.desvio_lead_time_dias !== null)
+      s.m.desvio_lead_time_dias = Math.max(1, Math.round(lt * 0.2))
+  }
+
+  const commodity =
+    /^(Parafuso|Porca|Arruela|Pino|Bucha|Rebite|Lixa|Disco|Broca|Abraçadeira|Fita isolante|Lâmpada|Pé nivelador|Cabo PP|Bico de contato)/
+  const semCriticidade: number[] = []
+  specs.forEach((s, i) => {
+    const m = s.m
+    const cat = m.categoria
+    m.num_fornecedores = rng.inteiro(1, 4)
+    const sub = rng.u()
+    m.possui_substituto = sub < 0.12 ? null : sub < 0.56 ? 'Sim' : 'Não'
+
+    let links: string[] = []
+    if (setSobe.has(i)) {
+      ajustarLT(s, rng.inteiro(60, 90))
+      m.num_fornecedores = 1
+      m.possui_substituto = 'Não'
+      links = [rng.escolher(alta)]
+      if (rng.u() < 0.5) links.push(rng.escolher(media))
+    } else if (setDesce.has(i)) {
+      ajustarLT(s, rng.inteiro(5, 10))
+      m.num_fornecedores = rng.inteiro(3, 4)
+      m.possui_substituto = 'Sim'
+      links = [rng.escolher(baixa)]
+      if (rng.u() < 0.5) links.push(rng.escolher(baixa))
+    } else if (commodity.test(m.descricao)) {
+      // Itens de prateleira: vários fornecedores, com substituto, sem máquina crítica.
+      m.num_fornecedores = rng.inteiro(3, 4)
+      m.possui_substituto = 'Sim'
+      links = [rng.escolher(rng.u() < 0.4 ? media : baixa)]
+    } else if (cat === 'MRO' || cat === 'Componentes') {
+      // Itens comuns: a maioria serve a máquinas de criticidade Média ou Baixa.
+      const qtd = rng.u() < 0.6 ? 1 : rng.u() < 0.75 ? 2 : 3
+      for (let k = 0; k < qtd; k++) {
+        const x = rng.u()
+        links.push(rng.escolher(x < 0.2 ? alta : x < 0.6 ? media : baixa))
+      }
+    } else if (cat === 'Químicos' && rng.u() < 0.4) {
+      links = [rng.escolher(rng.u() < 0.5 ? media : baixa)]
+    }
+    vincular(i, links)
+
+    if (links.length) {
+      // Custo de parada só para itens que atendem máquina Alta ou Média.
+      const crits = links.map((e) => critDe.get(e))
+      if (crits.includes('Alta'))
+        m.custo_parada_hora = Math.round(rng.logUniforme(1500, 5000) / 10) * 10
+      else if (crits.includes('Média'))
+        m.custo_parada_hora = Math.round(rng.logUniforme(200, 1500) / 10) * 10
+    } else if (cat === 'EPI') m.criticidade = rng.u() < 0.3 ? 'Alta' : 'Média'
+    else if (cat === 'Matéria-prima') m.criticidade = 'Média'
+    else if (cat === 'Embalagens' || cat === 'Químicos') {
+      m.criticidade = cat === 'Químicos' && rng.u() < 0.5 ? 'Média' : 'Baixa'
+      if (i !== manual) semCriticidade.push(i)
+    }
+
+    if (cat === 'EPI') m.crit_seguranca = rng.inteiro(3, 5)
+    else if (cat === 'Químicos') m.crit_seguranca = rng.inteiro(1, 5)
+  })
+
+  // ~5 itens sem criticidade em lugar nenhum: demonstram o aviso de valor neutro (0,5).
+  for (const i of rng.embaralhar(semCriticidade).slice(0, 5)) specs[i].m.criticidade = null
+
+  if (manual >= 0) {
+    specs[manual].m.classe_manual = 'A'
+    specs[manual].m.justificativa_classe = 'Item exigido pela NR-12 para liberar a linha'
+  }
+
+  return {
+    equipamentos: EQUIPAMENTOS_DEMO.map((e) => ({ ...e })),
+    ondeUsado,
+  }
+}
+
 export function gerarDemoIndustria(semente = 20261031): DadosDemo {
   const rng = criarRng(semente)
   const specs = montarCatalogo(rng)
@@ -484,6 +687,12 @@ export function gerarDemoIndustria(semente = 20261031): DadosDemo {
   specs[ordem[40]].m.estoque_seguranca_manual = Math.round(specs[ordem[40]].mediaMensal * 0.8)
   specs[ordem[41]].m.estoque_seguranca_manual = Math.round(specs[ordem[41]].mediaMensal * 0.5)
   specs[ordem[42]].m.lead_time_dias = Number.NaN
+  // Multicritério: antes da simulação, porque muda o lead time de alguns itens.
+  const mc = aplicarMulticriterio(
+    specs,
+    new Set([...ordem.slice(20, 34), ordem[40], ordem[41], ordem[42]]),
+    semente + 16,
+  )
 
   const movimentacoes: MovimentoDemo[] = []
   const pedidos: PedidoDemo[] = []
@@ -551,7 +760,7 @@ export function gerarDemoIndustria(semente = 20261031): DadosDemo {
           const dev = fracionavel ? r2(chega * 0.1) : Math.max(1, Math.round(chega * 0.1))
           estoque = arred(estoque - dev)
           movimentacoes.push({
-            data: somarDias(data, 2),
+            data: ateDataBase(somarDias(data, 2)),
             codigo: s.m.codigo,
             tipo: 'Devolução ao fornecedor',
             quantidade: dev,
@@ -604,7 +813,7 @@ export function gerarDemoIndustria(semente = 20261031): DadosDemo {
             if (dv < q) {
               estoque = arred(estoque + dv)
               movimentacoes.push({
-                data: somarDias(data, 1),
+                data: ateDataBase(somarDias(data, 1)),
                 codigo: s.m.codigo,
                 tipo: 'Devolução ao estoque',
                 quantidade: dv,
@@ -699,7 +908,15 @@ export function gerarDemoIndustria(semente = 20261031): DadosDemo {
   for (let i = 0; i < 3; i++) problemas.push({ ...rng.escolher(saidas) })
   for (const p of problemas) movimentacoes.splice(rng.inteiro(0, movimentacoes.length), 0, p)
 
-  return { materiais: specs.map((s) => s.m), movimentacoes, pedidos, bom: [], mps: [] }
+  return {
+    materiais: specs.map((s) => s.m),
+    movimentacoes,
+    pedidos,
+    bom: [],
+    mps: [],
+    equipamentos: mc.equipamentos,
+    ondeUsado: mc.ondeUsado,
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -733,6 +950,7 @@ export function gerarDemoMontagem(semente = 20261101): DadosDemo {
     categoria,
     tipo_item: tipo,
     data_cadastro: null,
+    ...SEM_MC,
   })
   const materiais: MaterialDemo[] = [
     mat('PA-100', 'Carrinho de carga 300 kg', 'UN', 35, 890, 7, 'Fabricado', 'Produto acabado'),
@@ -925,5 +1143,5 @@ export function gerarDemoMontagem(semente = 20261101): DadosDemo {
     documento: 'PV-FINAL',
   })
   movimentacoes.sort((a, b) => (a.data as Date).getTime() - (b.data as Date).getTime())
-  return { materiais, movimentacoes, pedidos, bom, mps }
+  return { materiais, movimentacoes, pedidos, bom, mps, equipamentos: [], ondeUsado: [] }
 }

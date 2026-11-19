@@ -13,7 +13,8 @@ export function normalizarTexto(s: unknown): string {
     .trim()
 }
 
-export type NomeAba = 'Materiais' | 'Movimentacoes' | 'PedidosAbertos' | 'BOM' | 'MPS'
+export type NomeAba =
+  'Materiais' | 'Movimentacoes' | 'PedidosAbertos' | 'BOM' | 'MPS' | 'Equipamentos' | 'OndeUsado'
 
 export const ABAS: readonly NomeAba[] = [
   'Materiais',
@@ -21,6 +22,8 @@ export const ABAS: readonly NomeAba[] = [
   'PedidosAbertos',
   'BOM',
   'MPS',
+  'Equipamentos',
+  'OndeUsado',
 ]
 export const ABAS_OBRIGATORIAS: readonly NomeAba[] = ['Materiais', 'Movimentacoes']
 
@@ -55,6 +58,14 @@ export const SINONIMOS_ABA: Record<NomeAba, string[]> = {
   ],
   BOM: ['bom', 'estrutura', 'estrutura de produto', 'lista de materiais'],
   MPS: ['mps', 'plano mestre', 'plano mestre de producao', 'programa mestre'],
+  Equipamentos: [
+    'equipamentos',
+    'equipamento',
+    'maquinas',
+    'ativos',
+    'criticidade de equipamentos',
+  ],
+  OndeUsado: ['ondeusado', 'onde usado', 'onde e usado', 'aplicacao', 'aplicacoes', 'where used'],
 }
 
 export interface CampoDef {
@@ -206,6 +217,49 @@ export const CAMPOS: Record<NomeAba, CampoDef[]> = {
         'inicio de vida',
       ],
     },
+    // ABC multicritério (seção 16-B)
+    {
+      campo: 'criticidade',
+      rotulo: 'Criticidade',
+      obrigatorio: false,
+      sinonimos: ['criticidade', 'criticidade item', 'classe ved', 'ved', 'importancia'],
+    },
+    {
+      campo: 'num_fornecedores',
+      rotulo: 'Nº de fornecedores',
+      obrigatorio: false,
+      sinonimos: [
+        'num fornecedores',
+        'numero de fornecedores',
+        'n fornecedores',
+        'qtd fornecedores',
+        'fornecedores',
+      ],
+    },
+    {
+      campo: 'possui_substituto',
+      rotulo: 'Possui substituto',
+      obrigatorio: false,
+      sinonimos: ['possui substituto', 'substituto', 'tem substituto', 'item substituto'],
+    },
+    {
+      campo: 'custo_parada_hora',
+      rotulo: 'Custo de parada (R$/h)',
+      obrigatorio: false,
+      sinonimos: ['custo parada hora', 'custo de parada', 'custo parada', 'custo hora parada'],
+    },
+    {
+      campo: 'classe_manual',
+      rotulo: 'Classe manual',
+      obrigatorio: false,
+      sinonimos: ['classe manual', 'classe abc manual'],
+    },
+    {
+      campo: 'justificativa_classe',
+      rotulo: 'Justificativa da classe',
+      obrigatorio: false,
+      sinonimos: ['justificativa classe', 'justificativa da classe', 'justificativa'],
+    },
   ],
   Movimentacoes: [
     {
@@ -326,6 +380,35 @@ export const CAMPOS: Record<NomeAba, CampoDef[]> = {
       rotulo: 'Quantidade',
       obrigatorio: true,
       sinonimos: ['quantidade', 'qtd', 'qtde', 'quant'],
+    },
+  ],
+  Equipamentos: [
+    {
+      campo: 'equipamento',
+      rotulo: 'Equipamento',
+      obrigatorio: true,
+      sinonimos: ['equipamento', 'maquina', 'ativo', 'tag', 'codigo equipamento'],
+    },
+    {
+      campo: 'criticidade',
+      rotulo: 'Criticidade',
+      obrigatorio: false,
+      sinonimos: ['criticidade', 'classe ved', 'ved', 'importancia'],
+    },
+    {
+      campo: 'setor',
+      rotulo: 'Setor',
+      obrigatorio: false,
+      sinonimos: ['setor', 'area', 'linha', 'local'],
+    },
+  ],
+  OndeUsado: [
+    { campo: 'codigo', rotulo: 'Código', obrigatorio: true, sinonimos: COD },
+    {
+      campo: 'equipamento',
+      rotulo: 'Equipamento',
+      obrigatorio: true,
+      sinonimos: ['equipamento', 'maquina', 'ativo', 'tag', 'codigo equipamento'],
     },
   ],
 }

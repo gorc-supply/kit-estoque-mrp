@@ -716,4 +716,4 @@ Casos 22 a 28 da seção 13.
 - [ ] Fase 6 — Exportação (pronta e testada com SheetJS/ExcelJS; falta abrir no Excel desktop do Gabriel sem aviso de reparo)
 - [ ] Fase 7 — Visual e polimento (feito; falta medir Lighthouse ≥ 90 — o npx lighthouse foi bloqueado pela permissão do ambiente)
 - [ ] Fase 8 — Publicação (README, LICENSE, og-image, metatags e workflow prontos; repositório https://github.com/gorc-supply/kit-estoque-mrp; site em https://gorc-supply.github.io/kit-estoque-mrp/)
-- [ ] Fase 9 — ABC multicritério
+- [x] Fase 9 — ABC multicritério (motor em src/engine/multicriterio.ts; testes 22 a 28 + extras; demo-industria com 25 equipamentos: 28 itens sobem e 25 descem no preset Produção/MRP)

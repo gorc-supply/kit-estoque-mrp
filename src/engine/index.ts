@@ -7,6 +7,12 @@ import { ehUnidadeDiscreta } from './estatistica'
 import { moeda, num } from './formatar'
 import { calcularKPIs } from './kpis'
 import { calcularMRP, ErroBOMCircular, type ItemMRPEntrada } from './mrp'
+import {
+  classificarMulticriterio,
+  prepararDadosMC,
+  type EntradaMC,
+  type SaidaMC,
+} from './multicriterio'
 import { completarParametros } from './padroes'
 import { calcularParametros } from './parametros'
 import { backtest, metodoRegraFixa, preverCom } from './previsao'
@@ -87,6 +93,7 @@ export function processar(
     mrp: null,
     erroMRP: null,
     consolidado: { rotulos: janela.rotulos, entradasValor: [], saidasValor: [], saldoValor: [] },
+    multicriterio: null,
     tempoMs: 0,
   }
   if (v.relatorio.bloqueante) return { ...vazio, tempoMs: relogio() - t0 }
@@ -139,6 +146,38 @@ export function processar(
     ).map((r) => [r.codigo, r.classe]),
   )
 
+  // ---------------------------------------------------------------- ABC multicritério (16-B)
+  let mcSaida: SaidaMC | null = null
+  if (p.multicriterio.ativo) {
+    const prep = prepararDadosMC(v.materiais, entrada.equipamentos ?? [], entrada.ondeUsado ?? [])
+    const entradasMC: EntradaMC[] = parciais.map(({ m, xyz, consumoAnual }) => {
+      const d = prep.porCodigo.get(m.codigo)
+      return {
+        codigo: m.codigo,
+        classeValor: abc.get(m.codigo)!.classe,
+        valorAnual: consumoAnual,
+        leadTime: m.leadTimeDias ?? p.leadTimePadraoDias,
+        cv: xyz.cv,
+        criticidade: d?.criticidade ?? null,
+        equipamentos: d?.equipamentos ?? null,
+        fornecedores:
+          m.numFornecedores !== undefined && Number.isFinite(m.numFornecedores)
+            ? m.numFornecedores
+            : null,
+        substituto: m.possuiSubstituto ?? null,
+        custoParada:
+          m.custoParadaHora !== undefined && Number.isFinite(m.custoParadaHora)
+            ? m.custoParadaHora
+            : null,
+        criterios: m.criterios ?? {},
+        classeManual: m.classeManual ?? null,
+        justificativa: m.justificativaClasse?.trim() || null,
+      }
+    })
+    mcSaida = classificarMulticriterio(entradasMC, p.multicriterio)
+    problemasExtra.push(...prep.avisos, ...mcSaida.avisos)
+  }
+
   // ---------------------------------------------------------------- itens
   aoProgresso('Calculando previsão e parâmetros', 0.45)
   const pedidosPorCodigo = new Map<string, number>()
@@ -147,6 +186,9 @@ export function processar(
 
   const itens: ItemResultado[] = parciais.map(({ m, serie, custo, xyz, consumoAnual }) => {
     const a = abc.get(m.codigo)!
+    const mcItem = mcSaida?.porItem.get(m.codigo) ?? null
+    // Com o multicritério ligado, a classe final substitui a de valor em todo o resto.
+    const classe = mcItem?.classeFinal ?? a.classe
     const classeXYZ = xyz.classe
     const temClasse = classeXYZ === 'X' || classeXYZ === 'Y' || classeXYZ === 'Z'
 
@@ -169,7 +211,7 @@ export function processar(
     const leadTimeDias = m.leadTimeDias ?? p.leadTimePadraoDias
     const desvioLT =
       m.desvioLeadTimeDias !== undefined && m.desvioLeadTimeDias > 0 ? m.desvioLeadTimeDias : null
-    const nivel = temClasse ? p.nivelServico[a.classe][classeXYZ] : null
+    const nivel = temClasse ? p.nivelServico[classe][classeXYZ] : null
     const loteMinimo = m.loteMinimo !== undefined && m.loteMinimo > 0 ? m.loteMinimo : 0
     const multiplo = m.multiploCompra !== undefined && m.multiploCompra > 0 ? m.multiploCompra : 1
     const pedidos = pedidosPorCodigo.get(m.codigo) ?? 0
@@ -216,7 +258,7 @@ export function processar(
       coberturaDias: par.coberturaDias,
       diasSemSaida,
       diasSemGiro: p.diasSemGiro,
-      classeABC: a.classe,
+      classeABC: classe,
     })
 
     // Saldo e giro (6.9)
@@ -283,18 +325,20 @@ export function processar(
       media: xyz.media,
       desvio: xyz.desvio,
       cv: xyz.cv,
-      classeABC: a.classe,
+      classeABC: classe,
       pctConsumo: a.pct,
       pctAcumulado: a.pctAcumulado,
       pctAcumuladoAnterior: a.pctAcumuladoAnterior,
       posicaoABC: a.posicao,
       classeABCQuantidade: abcQtd.get(m.codigo) ?? 'C',
       classeABCValorEstoque: abcEst.get(m.codigo) ?? 'C',
+      classeABCValor: a.classe,
+      multicriterio: mcItem,
       classeXYZ,
       adi: xyz.adi,
       cv2: xyz.cv2,
       padrao: xyz.padrao,
-      classeCombinada: `${a.classe}${classeXYZ === 'Novo' ? '-Novo' : classeXYZ}`,
+      classeCombinada: `${classe}${classeXYZ === 'Novo' ? '-Novo' : classeXYZ}`,
       historicoInsuficiente: xyz.historicoInsuficiente,
       metodo,
       motivoMetodo,
@@ -450,6 +494,7 @@ export function processar(
     mrp,
     erroMRP,
     consolidado,
+    multicriterio: mcSaida?.resumo ?? null,
     tempoMs: relogio() - t0,
   }
 }

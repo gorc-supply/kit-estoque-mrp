@@ -28,6 +28,28 @@ export async function escreverDemo(
     'Todos os dados são 100% sintéticos, gerados por scripts/gerar-dados-demo.ts com semente fixa. Nenhum dado real de empresa.',
   ])
 
+  // Colunas do ABC multicritério (seção 16-B): só quando algum item tem esses dados.
+  const temMC = dados.materiais.some(
+    (m) =>
+      m.criticidade !== null ||
+      m.num_fornecedores !== null ||
+      m.possui_substituto !== null ||
+      m.custo_parada_hora !== null ||
+      m.classe_manual !== null,
+  )
+  const temCritSeguranca = dados.materiais.some((m) => m.crit_seguranca !== null)
+  const colunasMC: { cabecalho: string; largura: number; formato?: string }[] = temMC
+    ? [
+        { cabecalho: 'criticidade', largura: 12 },
+        { cabecalho: 'num_fornecedores', largura: 16 },
+        { cabecalho: 'possui_substituto', largura: 17 },
+        { cabecalho: 'custo_parada_hora', largura: 17, formato: FMT_MOEDA },
+        { cabecalho: 'classe_manual', largura: 13 },
+        { cabecalho: 'justificativa_classe', largura: 44 },
+      ]
+    : []
+  if (temCritSeguranca) colunasMC.push({ cabecalho: 'crit_seguranca', largura: 14 })
+
   const mat = criarAbaTabela(wb, 'Materiais', [
     { cabecalho: 'codigo', largura: 12 },
     { cabecalho: 'descricao', largura: 40 },
@@ -43,8 +65,20 @@ export async function escreverDemo(
     { cabecalho: 'categoria', largura: 16 },
     { cabecalho: 'tipo_item', largura: 11 },
     { cabecalho: 'data_cadastro', largura: 13, formato: FMT_DATA },
+    ...colunasMC,
   ])
   for (const m of dados.materiais) {
+    const extras: (string | number | null)[] = temMC
+      ? [
+          m.criticidade,
+          nulo(m.num_fornecedores),
+          m.possui_substituto,
+          nulo(m.custo_parada_hora),
+          m.classe_manual,
+          m.justificativa_classe,
+        ]
+      : []
+    if (temCritSeguranca) extras.push(nulo(m.crit_seguranca))
     mat.addRow([
       m.codigo,
       m.descricao,
@@ -60,6 +94,7 @@ export async function escreverDemo(
       m.categoria,
       m.tipo_item,
       m.data_cadastro,
+      ...extras,
     ])
   }
 
@@ -98,6 +133,21 @@ export async function escreverDemo(
       { cabecalho: 'quantidade', largura: 12 },
     ])
     for (const m of dados.mps) mps.addRow([m.codigo, m.semana_inicio, m.quantidade])
+  }
+  if (dados.equipamentos.length) {
+    const eq = criarAbaTabela(wb, 'Equipamentos', [
+      { cabecalho: 'equipamento', largura: 34 },
+      { cabecalho: 'criticidade', largura: 12 },
+      { cabecalho: 'setor', largura: 16 },
+    ])
+    for (const e of dados.equipamentos) eq.addRow([e.equipamento, e.criticidade, e.setor])
+  }
+  if (dados.ondeUsado.length) {
+    const ou = criarAbaTabela(wb, 'OndeUsado', [
+      { cabecalho: 'codigo', largura: 12 },
+      { cabecalho: 'equipamento', largura: 34 },
+    ])
+    for (const u of dados.ondeUsado) ou.addRow([u.codigo, u.equipamento])
   }
 
   return (await wb.xlsx.writeBuffer()) as ArrayBuffer

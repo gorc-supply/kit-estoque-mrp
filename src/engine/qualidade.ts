@@ -47,6 +47,10 @@ export const DESCRICAO_REGRA: Record<RegraQualidade, string> = {
   mps_invalido: 'Linha de MPS inválida',
   coluna_ausente: 'Coluna obrigatória ausente',
   leitura: 'Problema de leitura',
+  mc_dado_faltando: 'Multicritério: dado faltando',
+  mc_criticidade_invalida: 'Multicritério: criticidade inválida',
+  mc_manual_sem_justificativa: 'Multicritério: classe manual sem justificativa',
+  mc_onde_usado_invalido: 'Multicritério: linha de OndeUsado inválida',
 }
 
 const BLOQUEANTES: ReadonlySet<RegraQualidade> = new Set([

@@ -14,8 +14,8 @@ export function opcaoPareto(
   const ord = [...itens]
     .filter((i) => i.consumoAnualValor > 0)
     .sort((a, b) => a.posicaoABC - b.posicaoABC)
-  const fimA = ord.findIndex((i) => i.classeABC !== 'A')
-  const fimB = ord.findIndex((i) => i.classeABC === 'C')
+  const fimA = ord.findIndex((i) => i.classeABCValor !== 'A')
+  const fimB = ord.findIndex((i) => i.classeABCValor === 'C')
   const nA = fimA < 0 ? ord.length : fimA
   const nB = fimB < 0 ? ord.length : fimB
   const faixa = (de: number, ate: number, cor: string, nome: string) =>
@@ -31,7 +31,7 @@ export function opcaoPareto(
       trigger: 'axis',
       formatter: (ps: { dataIndex: number }[]) => {
         const i = ord[ps[0].dataIndex]
-        return `<b>${i.codigo}</b> — ${i.descricao}<br/>Consumo anual: ${moeda(i.consumoAnualValor)}<br/>% acumulado: ${pct(i.pctAcumulado)}<br/>Classe ${i.classeABC}`
+        return `<b>${i.codigo}</b> — ${i.descricao}<br/>Consumo anual: ${moeda(i.consumoAnualValor)}<br/>% acumulado: ${pct(i.pctAcumulado)}<br/>Classe ${i.classeABCValor}`
       },
     },
     legend: { data: ['Consumo anual (R$)', '% acumulado'] },
@@ -62,7 +62,7 @@ export function opcaoPareto(
         large: ord.length > 500,
         data: ord.map((i) => ({
           value: i.consumoAnualValor,
-          itemStyle: { color: c.abc[i.classeABC] },
+          itemStyle: { color: c.abc[i.classeABCValor] },
         })),
         markArea: {
           silent: true,

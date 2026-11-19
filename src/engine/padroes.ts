@@ -1,5 +1,6 @@
 // Valores padrão dos parâmetros globais (seção 6.1).
 
+import { CONFIG_MC_PADRAO, completarConfigMC } from './multicriterio'
 import type { MatrizNivelServico, Parametros } from './tipos'
 
 export const MATRIZ_NIVEL_PADRAO: MatrizNivelServico = {
@@ -33,6 +34,7 @@ export const PARAMETROS_PADRAO: Parametros = {
   metodoPrevisao: 'regra_fixa',
   nivelServico: MATRIZ_NIVEL_PADRAO,
   leadTimePadraoDias: 30,
+  multicriterio: CONFIG_MC_PADRAO,
 }
 
 /** Combina parâmetros parciais com os padrões (inclusive a matriz de nível de serviço). */
@@ -45,5 +47,6 @@ export function completarParametros(p: Partial<Parametros> = {}): Parametros {
       B: { ...MATRIZ_NIVEL_PADRAO.B, ...p.nivelServico?.B },
       C: { ...MATRIZ_NIVEL_PADRAO.C, ...p.nivelServico?.C },
     },
+    multicriterio: completarConfigMC(p.multicriterio),
   }
 }

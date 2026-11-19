@@ -4,12 +4,16 @@
 import Papa from 'papaparse'
 import * as XLSX from 'xlsx'
 import type {
+  ClasseABC,
   Entrada,
+  Equipamento,
   ItemBOM,
   ItemMPS,
   Material,
   Movimento,
+  OndeUsado,
   PedidoAberto,
+  ProblemaQualidade,
   TipoItem,
 } from '../engine/tipos'
 import {
@@ -97,9 +101,18 @@ export function decodificarTexto(dados: ArrayBuffer): string {
   }
 }
 
+/** Separador pela 1ª linha não vazia: o mais frequente entre ";", "," e tabulação. */
+function detectarSeparador(texto: string): string {
+  const primeira = texto.split(/\r?\n/).find((l) => l.trim()) ?? ''
+  const contagem = [';', ',', '\t'].map((d) => ({ d, n: primeira.split(d).length - 1 }))
+  contagem.sort((a, b) => b.n - a.n)
+  return contagem[0].n > 0 ? contagem[0].d : ';'
+}
+
 export function lerCSV(nome: string, texto: string): TabelaBruta | null {
-  const r = Papa.parse<string[]>(texto, { delimiter: '', skipEmptyLines: false })
-  const delim = r.meta.delimiter
+  // A detecção automática do PapaParse falha em arquivos pequenos (ex.: 2 colunas e 1 linha).
+  const delim = detectarSeparador(texto)
+  const r = Papa.parse<string[]>(texto, { delimiter: delim, skipEmptyLines: false })
   const estilo: EstiloDecimal = delim === ',' ? 'ponto' : 'virgula'
   return montarTabela(nome, r.data as unknown[][], 1, estilo, false)
 }
@@ -215,6 +228,27 @@ export function mapearTabelas(
   return { mapas, pendencias, todas }
 }
 
+/** Sim/Não → boolean; vazio ou não reconhecido → undefined. */
+function lerSimNao(v: unknown): boolean | undefined {
+  const n = normalizarTexto(v)
+  if (['sim', 's', 'yes', 'y', 'true', 'verdadeiro', '1', 'x'].includes(n)) return true
+  if (['nao', 'n', 'no', 'false', 'falso', '0'].includes(n)) return false
+  return undefined
+}
+
+function lerClasse(v: unknown): ClasseABC | undefined {
+  const n = normalizarTexto(v).toUpperCase()
+  return n === 'A' || n === 'B' || n === 'C' ? n : undefined
+}
+
+/** Criticidade como veio (texto ou número 1–5); a interpretação é do engine. */
+function lerCriticidade(v: unknown): string | number | undefined {
+  if (v === null || v === undefined) return undefined
+  if (typeof v === 'number') return v
+  const s = String(v).trim()
+  return s ? s : undefined
+}
+
 function tipoItem(v: unknown): TipoItem {
   const n = normalizarTexto(v)
   return n.startsWith('fab') || n === 'f' || n.startsWith('prod') || n === 'manufaturado'
@@ -242,12 +276,34 @@ export function converter(tabelas: Tabelas, mapas: Partial<Record<NomeAba, MapaC
     return { t, col }
   }
 
+  const avisos: ProblemaQualidade[] = []
   const materiais: Material[] = []
   const mat = pegar('Materiais')
   if (mat) {
     const { t, col } = mat
     const num = (l: unknown[], c: string) => lerNumeroOpcional(col(l, c), t.estiloDecimal)
+    // Colunas crit_<nome>: critérios próprios da empresa para o ABC multicritério.
+    const colunasCrit = t.cabecalhos
+      .map((h, i) => ({ h: String(h ?? '').trim(), i }))
+      .filter(({ h }) => /^crit[_\s.-]/i.test(h) && h.length > 5)
+      .map(({ h, i }) => ({ nome: normalizarTexto(h.slice(5)).replace(/\s+/g, '_'), i }))
     t.linhas.forEach((l, k) => {
+      const manualBruto = lerTexto(col(l, 'classe_manual'))
+      if (manualBruto && !lerClasse(manualBruto)) {
+        avisos.push({
+          regra: 'leitura',
+          gravidade: 'aviso',
+          aba: 'Materiais',
+          linha: t.numerosLinha[k],
+          codigo: lerTexto(col(l, 'codigo')),
+          mensagem: `Linha ${t.numerosLinha[k]}: classe_manual "${manualBruto}" inválida (use A, B ou C). Ignorada.`,
+        })
+      }
+      let criterios: Record<string, number> | undefined
+      for (const c of colunasCrit) {
+        const v = lerNumeroOpcional(l[c.i], t.estiloDecimal)
+        if (v !== undefined) (criterios ??= {})[c.nome] = v
+      }
       materiais.push({
         codigo: lerTexto(col(l, 'codigo')),
         descricao: lerTexto(col(l, 'descricao')),
@@ -263,6 +319,13 @@ export function converter(tabelas: Tabelas, mapas: Partial<Record<NomeAba, MapaC
         categoria: lerTexto(col(l, 'categoria')) || undefined,
         tipoItem: tipoItem(col(l, 'tipo_item')),
         dataCadastro: lerData(col(l, 'data_cadastro'), t.data1904) ?? undefined,
+        criticidade: lerCriticidade(col(l, 'criticidade')),
+        numFornecedores: num(l, 'num_fornecedores'),
+        possuiSubstituto: lerSimNao(col(l, 'possui_substituto')),
+        custoParadaHora: num(l, 'custo_parada_hora'),
+        classeManual: lerClasse(col(l, 'classe_manual')),
+        justificativaClasse: lerTexto(col(l, 'justificativa_classe')) || undefined,
+        criterios,
         linha: t.numerosLinha[k],
       })
     })
@@ -332,7 +395,43 @@ export function converter(tabelas: Tabelas, mapas: Partial<Record<NomeAba, MapaC
     )
   }
 
-  return { materiais, movimentacoes, pedidosAbertos, bom, mps }
+  const equipamentos: Equipamento[] = []
+  const eq = pegar('Equipamentos')
+  if (eq) {
+    const { t, col } = eq
+    t.linhas.forEach((l, k) =>
+      equipamentos.push({
+        equipamento: lerTexto(col(l, 'equipamento')),
+        criticidade: lerCriticidade(col(l, 'criticidade')),
+        setor: lerTexto(col(l, 'setor')) || undefined,
+        linha: t.numerosLinha[k],
+      }),
+    )
+  }
+
+  const ondeUsado: OndeUsado[] = []
+  const ou = pegar('OndeUsado')
+  if (ou) {
+    const { t, col } = ou
+    t.linhas.forEach((l, k) =>
+      ondeUsado.push({
+        codigo: lerTexto(col(l, 'codigo')),
+        equipamento: lerTexto(col(l, 'equipamento')),
+        linha: t.numerosLinha[k],
+      }),
+    )
+  }
+
+  return {
+    materiais,
+    movimentacoes,
+    pedidosAbertos,
+    bom,
+    mps,
+    equipamentos,
+    ondeUsado,
+    problemasLeitura: avisos.length ? avisos : undefined,
+  }
 }
 
 /** Atalho: lê, mapeia automaticamente e converte (lança se faltar coluna obrigatória). */

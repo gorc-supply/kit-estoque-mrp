@@ -1,6 +1,14 @@
 // ECharts com importação só dos módulos usados (tree-shaking).
 
-import { BarChart, HeatmapChart, LineChart, PieChart, ScatterChart } from 'echarts/charts'
+import {
+  BarChart,
+  HeatmapChart,
+  LineChart,
+  PieChart,
+  RadarChart,
+  SankeyChart,
+  ScatterChart,
+} from 'echarts/charts'
 import {
   AriaComponent,
   DataZoomComponent,
@@ -9,6 +17,7 @@ import {
   MarkAreaComponent,
   MarkLineComponent,
   MarkPointComponent,
+  RadarComponent,
   TitleComponent,
   ToolboxComponent,
   TooltipComponent,
@@ -23,6 +32,9 @@ echarts.use([
   PieChart,
   ScatterChart,
   HeatmapChart,
+  SankeyChart,
+  RadarChart,
+  RadarComponent,
   AriaComponent,
   DataZoomComponent,
   GridComponent,

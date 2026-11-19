@@ -6,6 +6,7 @@ import { opcaoCustoLote } from '../charts/custo-lote'
 import { opcaoDistribuicaoLT } from '../charts/distribuicao-lt'
 import Grafico from '../charts/Grafico'
 import { opcaoHistoricoItem } from '../charts/historico-item'
+import { opcaoContribuicoes, opcaoRadarCriterios } from '../charts/multicriterio-item'
 import { opcaoPerfisParecidos } from '../charts/similaridade'
 import type { CoresGrafico } from '../charts/tema'
 import type { ItemResultado, Resultado } from '../engine/tipos'
@@ -95,6 +96,15 @@ export default function GavetaItem({
     [i, parecidos, rotulos],
   )
   const calculo = useMemo(() => (i ? montarCalculo(i, r) : []), [i, r])
+  const mcItem = i?.multicriterio ?? null
+  const opContrib = useCallback(
+    (c: CoresGrafico) => (mcItem ? opcaoContribuicoes(mcItem, c) : null),
+    [mcItem],
+  )
+  const opRadar = useCallback(
+    (c: CoresGrafico) => (mcItem ? opcaoRadarCriterios(mcItem, c) : null),
+    [mcItem],
+  )
 
   return (
     <Gaveta
@@ -161,6 +171,50 @@ export default function GavetaItem({
               descricao={`Consumo de ${i.codigo} por período: média ${numFixo(i.media, 2)}, desvio ${numFixo(i.desvio, 2)}, previsão ${numFixo(i.previsao, 2)}.`}
             />
           </Secao>
+
+          {mcItem && (
+            <Secao titulo="Classificação multicritério">
+              <p className="text-sm text-slate-700 dark:text-concreto/90">
+                <span className="inline-flex items-center gap-1 align-middle">
+                  Valor <SeloABC c={mcItem.classeValor} /> → final{' '}
+                  <SeloABC c={mcItem.classeFinal} />
+                </span>
+                {mcItem.score !== null && (
+                  <>
+                    {' '}
+                    · score {numFixo(mcItem.score, 3)} (posição {mcItem.posicao})
+                  </>
+                )}
+                {mcItem.estabilidade !== null && (
+                  <>
+                    {' '}
+                    ·{' '}
+                    <span className={mcItem.estabilidade < 0.7 ? 'font-semibold text-critico' : ''}>
+                      classe estável em {pct(mcItem.estabilidade, 0)} das simulações
+                    </span>
+                  </>
+                )}
+                {mcItem.equipamentos.length > 0 && <> · atende {mcItem.equipamentos.join(', ')}</>}
+              </p>
+              <p className="mt-1 text-sm font-medium text-marinho dark:text-white">
+                {mcItem.motivo}
+              </p>
+              {mcItem.criterios.length > 0 && (
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  <Grafico
+                    opcao={opContrib}
+                    altura={150}
+                    descricao={`Contribuição de cada critério para o score de ${i.codigo}.`}
+                  />
+                  <Grafico
+                    opcao={opRadar}
+                    altura={230}
+                    descricao={`Critérios normalizados de ${i.codigo} (1 = mais crítico).`}
+                  />
+                </div>
+              )}
+            </Secao>
+          )}
 
           <Secao titulo="Ver o cálculo">
             <div className="flex flex-col gap-4">

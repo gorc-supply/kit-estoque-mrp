@@ -11,6 +11,7 @@ const SECOES = [
   { slug: 'custo', titulo: 'Custo unitário' },
   { slug: 'abc', titulo: 'Curva ABC' },
   { slug: 'xyz', titulo: 'XYZ e padrão de demanda' },
+  { slug: 'multicriterio', titulo: 'ABC multicritério' },
   { slug: 'previsao', titulo: 'Previsão e backtest' },
   { slug: 'parametros', titulo: 'Parâmetros de reposição' },
   { slug: 'reposicao', titulo: 'Status e sugestão de compra' },
@@ -40,10 +41,18 @@ const GLOSSARIO: readonly (readonly [string, string])[] = [
     'Average Demand Interval: intervalo médio entre períodos com demanda (n ÷ períodos com demanda > 0). ADI = 1 é consumo todo período.',
   ],
   [
+    'AHP',
+    'Analytic Hierarchy Process (Saaty): método para tirar pesos de comparações par a par entre critérios ("quantas vezes este critério é mais importante que aquele?", escala de 1 a 9).',
+  ],
+  [
     'BOM',
     'Bill of Materials, estrutura de produto: lista de componentes (e quantidades) necessários para fazer um item.',
   ],
   ['Cobertura', 'Quantos dias o estoque atual dura no consumo previsto: estoque ÷ consumo diário.'],
+  [
+    'CR (razão de consistência)',
+    'No AHP, mede o quanto as comparações par a par se contradizem: CR = CI ÷ RI. Acima de 0,10, as comparações devem ser revistas.',
+  ],
   ['CV', 'Coeficiente de variação: desvio padrão ÷ média. Base da classe XYZ.'],
   [
     'CV²',
@@ -86,6 +95,10 @@ const GLOSSARIO: readonly (readonly [string, string])[] = [
   ],
   ['Posição de estoque', 'Estoque atual + pedidos em aberto. É comparada com o ponto de pedido.'],
   [
+    'Posto percentil',
+    'Normalização pela posição no ranking: (posição crescente − 1) ÷ (n − 1), de 0 a 1, com empates recebendo a média dos postos. Não se deixa achatar por valores extremos.',
+  ],
+  [
     'PP',
     'Ponto de pedido: quando a posição de estoque chega nele, é hora de comprar. PP = F × LTₚ + ES.',
   ],
@@ -95,8 +108,16 @@ const GLOSSARIO: readonly (readonly [string, string])[] = [
     'Syntetos-Boylan Approximation: método de Croston com correção de viés, para demanda intermitente.',
   ],
   [
+    'Score multicritério',
+    'Nota de 0 a 1 de cada item no ABC multicritério: S = Σ peso × critério normalizado. Quanto maior, mais proteção o item merece.',
+  ],
+  [
     'SES',
     'Suavização exponencial simples: média ponderada em que os períodos recentes pesam mais (peso α).',
+  ],
+  [
+    'VED',
+    'Classificação por criticidade: Vital (a falta para a operação), Essencial e Desejável. Cruzada com a ABC por valor na matriz VED.',
   ],
   ['Viés', 'Erro sistemático da previsão: Σ(previsto − real) ÷ Σreal. Positivo = superestima.'],
   [
@@ -325,6 +346,10 @@ export default function Metodologia() {
                 <strong>Classe XYZ</strong> e <strong>padrão de demanda</strong> (Syntetos-Boylan).
               </li>
               <li>
+                <strong>ABC multicritério</strong> (opcional): valor, lead time, criticidade e
+                outros critérios com pesos da empresa.
+              </li>
+              <li>
                 <strong>Previsão</strong> por período (F) e, opcionalmente, backtest dos métodos.
               </li>
               <li>
@@ -379,7 +404,7 @@ export default function Metodologia() {
           {/* ------------------------------------------------------------ 2 */}
           <Secao slug="dados">
             <P>
-              A planilha tem duas abas obrigatórias e três opcionais. Os nomes das colunas não
+              A planilha tem duas abas obrigatórias e cinco opcionais. Os nomes das colunas não
               precisam ser exatos: a ferramenta reconhece sinônimos comuns (por exemplo,
               &quot;cod&quot;, &quot;sku&quot; ou &quot;material&quot; para <code>codigo</code>;
               &quot;qtd&quot; ou &quot;qtde&quot; para <code>quantidade</code>; &quot;prazo&quot; ou
@@ -392,7 +417,7 @@ export default function Metodologia() {
               linhas={[
                 [
                   'Materiais (obrigatória)',
-                  'codigo, descricao, unidade, estoque_atual, lead_time_dias; opcionais: custo_unitario, desvio_lead_time_dias, lote_minimo, multiplo_compra, estoque_seguranca_manual, fornecedor, categoria, tipo_item, data_cadastro',
+                  'codigo, descricao, unidade, estoque_atual, lead_time_dias; opcionais: custo_unitario, desvio_lead_time_dias, lote_minimo, multiplo_compra, estoque_seguranca_manual, fornecedor, categoria, tipo_item, data_cadastro; para o ABC multicritério: criticidade, num_fornecedores, possui_substituto, custo_parada_hora, classe_manual, justificativa_classe, crit_<nome>',
                   'Cadastro: um item por linha, código único.',
                 ],
                 [
@@ -414,6 +439,16 @@ export default function Metodologia() {
                   'MPS',
                   'codigo, semana_inicio, quantidade',
                   'Plano mestre (demanda independente) dos produtos.',
+                ],
+                [
+                  'Equipamentos',
+                  'equipamento, criticidade, setor',
+                  'Criticidade das máquinas, para o ABC multicritério.',
+                ],
+                [
+                  'OndeUsado',
+                  'codigo, equipamento',
+                  'Em quais máquinas cada item é usado (um item pode ter várias linhas).',
                 ],
               ]}
             />
@@ -663,8 +698,15 @@ export default function Metodologia() {
             <P>
               Na aba ABC-XYZ também há a ABC por <strong>quantidade consumida</strong> (d̄ ×
               períodos_por_ano) e por <strong>valor em estoque</strong> (estoque atual × custo), com
-              os mesmos cortes. A matriz ABC×XYZ e o nível de serviço usam sempre a ABC por valor de
-              consumo.
+              os mesmos cortes. A matriz ABC×XYZ e o nível de serviço usam a ABC por valor de
+              consumo, a menos que o{' '}
+              <a
+                href="#metodologia-multicriterio"
+                className="text-aco-claro underline dark:text-seguranca"
+              >
+                ABC multicritério
+              </a>{' '}
+              esteja ligado: aí passam a usar a classe final dele.
             </P>
           </Secao>
 
@@ -731,6 +773,433 @@ export default function Metodologia() {
           </Secao>
 
           {/* ------------------------------------------------------------ 7 */}
+          <Secao slug="multicriterio">
+            <P>
+              A curva ABC clássica olha só para o valor de consumo. Na prática, um item de valor
+              intermediário que demora 90 dias para chegar e alimenta uma máquina crítica merece
+              mais proteção do que um item caro que chega em 5 dias e serve a um equipamento
+              secundário. O ABC multicritério deixa a empresa montar a própria régua (critérios e
+              pesos), mostra quem mudou de classe e por quê, e usa a classe resultante no resto da
+              ferramenta.
+            </P>
+            <P>
+              O módulo é <strong>opcional</strong>: desligado, tudo funciona como antes (ABC por
+              valor). Ligado, a <strong>classe final</strong> substitui a classe por valor na matriz
+              ABC×XYZ, no nível de serviço, na prioridade de compra, nos KPIs e na planilha de
+              saída. A classe por valor continua visível ao lado, para comparação.
+            </P>
+
+            <H3>Entradas (todas opcionais)</H3>
+            <Tabela
+              legenda="Colunas novas da aba Materiais usadas pelo ABC multicritério"
+              colunas={['Coluna', 'Formato', 'Mais crítico quando', 'Observação']}
+              linhas={[
+                [
+                  'criticidade',
+                  'Alta/Média/Baixa, A/B/C, V/E/D (Vital/Essencial/Desejável) ou escala 1 a 5',
+                  'maior',
+                  'Valor não reconhecido gera aviso e é tratado como vazio.',
+                ],
+                ['num_fornecedores', 'número', 'menor', '1 = fonte única.'],
+                ['possui_substituto', 'Sim/Não', 'Não', 'Vazio = dado faltando.'],
+                [
+                  'custo_parada_hora',
+                  'número (R$/h)',
+                  'maior',
+                  'Custo de a máquina parar por falta do item.',
+                ],
+                [
+                  'classe_manual + justificativa_classe',
+                  'A/B/C + texto',
+                  '—',
+                  'Substitui o resultado. Sem justificativa, a classe é aplicada mesmo assim, com aviso.',
+                ],
+                [
+                  'crit_<nome>',
+                  'número',
+                  'escolhido na tela',
+                  'Qualquer critério próprio da empresa, como crit_seguranca ou crit_qualidade.',
+                ],
+              ]}
+            />
+            <P>
+              Duas abas novas descrevem onde cada item é usado: <code>Equipamentos</code>{' '}
+              (equipamento, criticidade, setor) e <code>OndeUsado</code> (codigo, equipamento; um
+              item pode servir a várias máquinas). A regra da criticidade é:
+            </P>
+            <Lista ordenada>
+              <li>
+                se a coluna <code>criticidade</code> do próprio item estiver preenchida, ela
+                prevalece;
+              </li>
+              <li>
+                senão, vale a <strong>maior</strong> criticidade entre os equipamentos que o item
+                atende (pela aba OndeUsado);
+              </li>
+              <li>sem nenhuma das duas, o dado está faltando (veja abaixo).</li>
+            </Lista>
+            <P>
+              A aba OndeUsado também cria o critério automático{' '}
+              <strong>nº de equipamentos atendidos</strong>. Linhas de OndeUsado com código sem
+              cadastro ou campos vazios são ignoradas com aviso; um equipamento ausente da aba
+              Equipamentos conta como atendido, mas sem criticidade.
+            </P>
+            <Exemplo>
+              <P>
+                O item I1 é usado nos equipamentos E1 (Baixa) e E2 (Alta) → criticidade{' '}
+                <strong>Alta</strong> e 2 equipamentos atendidos. O item I2 também é usado em E2,
+                mas tem criticidade Baixa no próprio cadastro → fica <strong>Baixa</strong>, porque
+                o cadastro do item prevalece.
+              </P>
+            </Exemplo>
+
+            <H3>Critérios disponíveis</H3>
+            <Tabela
+              legenda="Critérios do ABC multicritério"
+              colunas={['Critério', 'Origem', 'Mais crítico quando']}
+              linhas={[
+                ['Valor de consumo anual (Cv_anual)', 'Automático (o ABC clássico)', 'maior'],
+                ['Lead time', 'Automático (lead_time_dias)', 'maior'],
+                ['Variabilidade (CV)', 'Automático (o mesmo CV da classe XYZ)', 'maior'],
+                ['Nº de equipamentos atendidos', 'Automático (aba OndeUsado)', 'maior'],
+                ['Criticidade', 'Cadastro ou equipamentos', 'maior'],
+                ['Nº de fornecedores', 'Cadastro', 'menor'],
+                ['Sem substituto', 'Cadastro', 'Não tem substituto'],
+                ['Custo de parada (R$/h)', 'Cadastro', 'maior'],
+                ['crit_<nome>', 'Cadastro', 'escolhido na tela (padrão: maior)'],
+              ]}
+            />
+            <Nota titulo="Por que o CV começa com peso 0">
+              <P>
+                A variabilidade já é o outro eixo da matriz (a classe XYZ). Colocá-la também no
+                score contaria a mesma informação duas vezes: o item seria empurrado para cima na
+                classe e, de novo, receberia o tratamento de item Z. O critério existe, mas o peso
+                padrão é zero e a tela avisa disso.
+              </P>
+            </Nota>
+
+            <H3>Modo 1: pontuação ponderada (padrão)</H3>
+            <P>
+              <strong>Passo 1: normalizar</strong> cada critério para a escala de 0 a 1, em que{' '}
+              <strong>1 = mais crítico</strong>. Sem isso, não dá para somar reais com dias.
+            </P>
+            <Formula>
+              posto percentil = (posição no ranking crescente − 1) ÷ (n − 1)
+              <br />
+              (empates recebem a média dos postos; n = itens com dado)
+              <br />
+              mín-máx (alternativa) = (x − mín) ÷ (máx − mín)
+              <br />
+              critério &quot;menor = mais crítico&quot;: n = 1 − valor normalizado
+            </Formula>
+            <P>
+              O <strong>posto percentil</strong> (padrão) só olha a ordem dos itens, não a distância
+              entre eles. Por isso é robusto a valores extremos: no mín-máx, um único item de R$ 1
+              milhão empurraria todos os outros para perto de zero; no posto, ele é apenas o
+              primeiro da fila. Se todos os itens têm o mesmo valor (ou só um item tem dado), todos
+              recebem 0,5.
+            </P>
+            <Exemplo titulo="Exemplo: empate no posto percentil">
+              <P>
+                Valores [10, 20, 20, 40], n = 4. Posições crescentes 1, 2, 3, 4; os dois 20 dividem
+                as posições 2 e 3 e recebem a média, 2,5. Postos: (1 − 1) ÷ 3 = <strong>0</strong>;
+                (2,5 − 1) ÷ 3 = <strong>0,5</strong> e <strong>0,5</strong>; (4 − 1) ÷ 3 ={' '}
+                <strong>1</strong>.
+              </P>
+            </Exemplo>
+            <P>Critérios categóricos não passam pelo ranking: são convertidos direto para 0 a 1.</P>
+            <Tabela
+              legenda="Conversão dos critérios categóricos"
+              colunas={['Valor informado', 'Normalizado']}
+              linhas={[
+                ['Alta, A, V (Vital) ou 5', '1'],
+                ['Média, B, E (Essencial) ou 3', '0,5'],
+                ['Baixa, C, D (Desejável) ou 1', '0'],
+                ['Escala 1 a 5 (x)', '(x − 1) ÷ 4: 2 → 0,25; 4 → 0,75'],
+                ['Substituto: Não / Sim', '1 / 0'],
+              ]}
+            />
+            <P>
+              <strong>Dado faltando</strong>: o item recebe o valor neutro <strong>0,5</strong>{' '}
+              naquele critério e o relatório de qualidade registra um aviso. O item não é excluído e
+              os pesos não são redistribuídos: ele simplesmente fica no meio da escala até que o
+              dado seja preenchido.
+            </P>
+            <P>
+              <strong>Passo 2: score.</strong> Só entram os critérios com peso maior que zero, e os
+              pesos são reescalados para somar 100%.
+            </P>
+            <Formula>
+              S = Σ peso<sub>k</sub> × n<sub>k</sub> (Σ peso<sub>k</sub> = 100%)
+            </Formula>
+            <P>
+              <strong>Passo 3: classes.</strong> Os itens são ordenados por S decrescente. Empates
+              de score são desfeitos pelo maior valor de consumo anual (e, persistindo, pelo
+              código). Há três formas de cortar a fila:
+            </P>
+            <Lista>
+              <li>
+                <strong>Mesma contagem do ABC por valor</strong> (padrão): se o ABC por valor gerou
+                15 itens A e 30 B, os 15 primeiros do score são A, os 30 seguintes são B e o resto é
+                C. É a comparação justa: o número de vagas em cada classe não muda, então cada item
+                que sobe tira a vaga de outro, e a pergunta passa a ser &quot;quem trocou de lugar
+                com quem&quot;. Sem isso, bastaria afrouxar um corte para &quot;subir&quot; todo
+                mundo.
+              </li>
+              <li>
+                <strong>Percentual de itens</strong> definido pelo usuário (padrão 20% A, 30% B, 50%
+                C).
+              </li>
+              <li>
+                <strong>Cortes de score</strong>: A se S ≥ 0,60; B se S ≥ 0,35; C abaixo (valores
+                editáveis).
+              </li>
+            </Lista>
+            <P>
+              <strong>Passo 4: regras de piso</strong> (opcionais e editáveis). Uma regra diz que
+              itens com certas características nunca ficam abaixo de uma classe. Exemplo:{' '}
+              <strong>
+                &quot;criticidade Alta, sem substituto e lead time &gt; 60 dias → nunca abaixo de
+                B&quot;
+              </strong>
+              . A regra só sobe a classe, nunca desce; &quot;sem substituto&quot; exige o Não
+              informado (vazio não conta). Quando uma regra é aplicada, o item mostra qual foi e
+              qual classe o cálculo indicava. A ferramenta já traz essa regra de exemplo, desligada.
+            </P>
+            <P>
+              <strong>Passo 5: classe manual.</strong> Se o item tem <code>classe_manual</code>, ela
+              prevalece sobre o score e sobre as regras de piso, e fica marcada como manual com a
+              justificativa.
+            </P>
+            <Nota titulo="Regras de piso e classe manual mexem na contagem">
+              <P>
+                A &quot;mesma contagem&quot; vale para a fila do score. Depois dela, regras de piso
+                e classes manuais podem mudar a quantidade final de itens em cada classe (por
+                exemplo, um item C levado a B por uma regra não tira ninguém de B).
+              </P>
+            </Nota>
+            <Exemplo titulo="Exemplo: três materiais (posto percentil)">
+              <P>
+                Pesos: valor 40%, lead time 25%, criticidade 35%. O ABC por valor colocou M1 em A,
+                M2 em B e M3 em C.
+              </P>
+              <Tabela
+                legenda="Dados brutos e normalizados (posto percentil)"
+                colunas={[
+                  'Item',
+                  'Valor anual',
+                  'Lead time',
+                  'Criticidade',
+                  'n valor',
+                  'n LT',
+                  'n crit.',
+                ]}
+                linhas={[
+                  ['M1', 'R$ 120.000,00', '5 dias', 'Baixa', '1', '0', '0'],
+                  ['M2', 'R$ 40.000,00', '90 dias', 'Alta', '0,5', '1', '1'],
+                  ['M3', 'R$ 10.000,00', '20 dias', 'Média', '0', '0,5', '0,5'],
+                ]}
+              />
+              <Formula>
+                S(M1) = 0,40 × 1 + 0,25 × 0 + 0,35 × 0 = <strong>0,40</strong>
+                <br />
+                S(M2) = 0,40 × 0,5 + 0,25 × 1 + 0,35 × 1 = 0,20 + 0,25 + 0,35 ={' '}
+                <strong>0,80</strong>
+                <br />
+                S(M3) = 0,40 × 0 + 0,25 × 0,5 + 0,35 × 0,5 = 0,125 + 0,175 = <strong>0,30</strong>
+              </Formula>
+              <P>
+                Ordem por valor: M1 &gt; M2 &gt; M3. Ordem multicritério:{' '}
+                <strong>M2 &gt; M1 &gt; M3</strong>. Com a mesma contagem do ABC por valor (1 A, 1
+                B, 1 C), <strong>M2 sobe de B para A</strong> e{' '}
+                <strong>M1 desce de A para B</strong>; M3 continua C. O item de valor intermediário,
+                mas de lead time longo e criticidade alta, passa à frente do item caro.
+              </P>
+              <P>
+                <strong>Com mín-máx</strong>: valor M1 = 1; M2 = (40.000 − 10.000) ÷ 110.000 =
+                0,2727; M3 = 0. Lead time M1 = 0; M2 = 1; M3 = (20 − 5) ÷ 85 = 0,1765. Scores: M1 =
+                0,4000; M2 = 0,40 × 0,2727 + 0,25 + 0,35 = 0,1091 + 0,60 = <strong>0,7091</strong>;
+                M3 = 0,25 × 0,1765 + 0,175 = 0,0441 + 0,175 = <strong>0,2191</strong>. A ordem é a
+                mesma (M2 &gt; M1 &gt; M3), mas repare como o valor de M2 caiu de 0,5 para 0,27 só
+                porque M1 está muito acima dos outros: é o efeito do valor extremo que o posto
+                percentil evita.
+              </P>
+            </Exemplo>
+
+            <H3>Quem mudou de classe e por quê</H3>
+            <P>
+              Para cada item que mudou, a ferramenta gera um motivo em texto a partir das{' '}
+              <strong>contribuições</strong> de cada critério (peso × valor normalizado):
+            </P>
+            <Lista>
+              <li>
+                <strong>Subiu</strong>: as duas maiores contribuições entre os critérios que não são
+                o valor, comparadas com a contribuição do valor.
+              </li>
+              <li>
+                <strong>Desceu</strong>: a contribuição do valor, comparada com os dois critérios
+                que mais deixaram de contribuir (peso − contribuição, ou seja, os pontos que o item
+                poderia ter ganho e não ganhou).
+              </li>
+              <li>
+                Não mudou: &quot;Mantém a classe&quot;, com o score. Regras de piso, classe manual e
+                matriz VED têm motivo próprio.
+              </li>
+            </Lista>
+            <Exemplo titulo="Exemplo: os motivos do exemplo acima">
+              <P>
+                M2: &quot;Subiu de B para A: criticidade Alta (+0,35) e lead time de 90 dias (+0,25)
+                compensam o valor intermediário (+0,20).&quot;
+              </P>
+              <P>
+                M1: &quot;Desceu de A para B: o valor alto (+0,40) não compensa criticidade Baixa
+                (+0,00 de 0,35 possíveis) e lead time de 5 dias (+0,00 de 0,25 possíveis).&quot;
+              </P>
+              <P>
+                O valor é descrito como alto, intermediário ou baixo conforme o normalizado (≥ 0,67;
+                ≥ 0,33; abaixo).
+              </P>
+            </Exemplo>
+
+            <H3>Modo 2: matriz ABC × criticidade (VED)</H3>
+            <P>
+              Inspirada em Flores e Whybark, a matriz bicritério cruza a classe por valor com a
+              criticidade e devolve a classe final. É mais simples de explicar para a diretoria; o
+              modo 1 é mais completo. A grade é editável; o padrão é:
+            </P>
+            <Tabela
+              legenda="Matriz VED padrão (linha = classe por valor, coluna = criticidade)"
+              colunas={['', 'Vital (V)', 'Essencial (E)', 'Desejável (D)']}
+              linhas={[
+                ['A (valor)', 'A', 'A', 'B'],
+                ['B (valor)', 'A', 'B', 'C'],
+                ['C (valor)', 'B', 'C', 'C'],
+              ]}
+            />
+            <P>
+              A criticidade normalizada vira V/E/D assim: <strong>V</strong> se ≥ 0,75;{' '}
+              <strong>E</strong> se ≥ 0,25; <strong>D</strong> abaixo. Na escala 1 a 5, isso dá 4 e
+              5 → V; 2 e 3 → E; 1 → D. Item sem criticidade é tratado como{' '}
+              <strong>Essencial</strong>, com aviso. Regras de piso e classe manual valem também
+              neste modo; score, posição e estabilidade, não.
+            </P>
+            <Exemplo>
+              <P>
+                Item B por valor e Vital → <strong>A</strong>. Item C por valor e Desejável →{' '}
+                <strong>C</strong>.
+              </P>
+            </Exemplo>
+
+            <H3>Pesos</H3>
+            <Tabela
+              legenda="Presets de pesos (pontos de partida, não normas)"
+              colunas={['Preset', 'Pesos']}
+              linhas={[
+                ['Clássico', 'valor 100% (reproduz o ABC por valor)'],
+                [
+                  'Produção/MRP (padrão ao ligar)',
+                  'valor 40%, lead time 25%, criticidade 25%, nº de fornecedores 10%',
+                ],
+                [
+                  'Manutenção (MRO)',
+                  'criticidade 35%, lead time 25%, valor 20%, substituto 10%, nº de fornecedores 10%',
+                ],
+                ['Personalizado', 'o que a empresa definir'],
+              ]}
+            />
+            <P>
+              Os presets são <strong>pontos de partida, não normas</strong>: cada empresa deve
+              ajustar à própria realidade. Os controles deslizantes rebalanceiam os demais pesos
+              para a soma ficar em 100%. A configuração pode ser salva e carregada como arquivo
+              .json, para reaproveitar mês a mês, e fica lembrada no navegador.
+            </P>
+            <H3>Assistente AHP</H3>
+            <P>
+              Quem tem dificuldade de dar números aos pesos pode compará-los dois a dois na escala
+              de Saaty: 1 = igualmente importantes, 3 = um pouco mais, 5 = bem mais, 7 = muito mais,
+              9 = extremamente mais (e os inversos, 1/3, 1/5…, quando é o contrário). A matriz A tem
+              a<sub>ij</sub> = quantas vezes o critério i é mais importante que j, com a
+              <sub>ji</sub> = 1 ÷ a<sub>ij</sub> e 1 na diagonal.
+            </P>
+            <Formula>
+              g<sub>i</sub> = (a<sub>i1</sub> × a<sub>i2</sub> × … × a<sub>in</sub>)^(1/n) (média
+              geométrica da linha)
+              <br />w<sub>i</sub> = g<sub>i</sub> ÷ Σ g (pesos)
+              <br />
+              λmáx ≈ média de (A·w)<sub>i</sub> ÷ w<sub>i</sub>
+              <br />
+              CI = (λmáx − n) ÷ (n − 1)
+              <br />
+              CR = CI ÷ RI
+            </Formula>
+            <Tabela
+              legenda="Índice aleatório RI (Saaty) por número de critérios"
+              colunas={['n', '3', '4', '5', '6', '7', '8', '9']}
+              linhas={[['RI', '0,58', '0,90', '1,12', '1,24', '1,32', '1,41', '1,45']]}
+            />
+            <P>
+              Se as comparações fossem perfeitamente coerentes (A melhor que B 2 vezes, B melhor que
+              C 2 vezes, então A melhor que C 4 vezes), λmáx seria exatamente n e CI = 0. O CR
+              compara a incoerência com a de comparações feitas ao acaso. Com{' '}
+              <strong>CR &gt; 0,10</strong>, a ferramenta avisa que as comparações estão incoerentes
+              e aponta o <strong>par mais contraditório</strong>: aquele em que a comparação
+              informada mais se afasta da razão entre os pesos resultantes, medida por |ln(a
+              <sub>ij</sub> ÷ (w<sub>i</sub> ÷ w<sub>j</sub>))|. O logaritmo faz &quot;o dobro&quot;
+              e &quot;a metade&quot; contarem como desvios do mesmo tamanho.
+            </P>
+            <Exemplo titulo="Exemplo: matriz perfeitamente coerente">
+              <P>
+                Partindo dos pesos 0,5 / 0,3 / 0,2 e montando a<sub>ij</sub> = w<sub>i</sub> ÷ w
+                <sub>j</sub> (valores fora da escala inteira de Saaty, só para conferir o método):
+              </P>
+              <Tabela
+                legenda="Matriz de comparações construída a partir de 0,5 / 0,3 / 0,2"
+                colunas={['', 'Critério 1', 'Critério 2', 'Critério 3', 'Média geométrica']}
+                linhas={[
+                  ['Critério 1', '1', '5/3', '5/2', '∛4,1667 = 1,6092'],
+                  ['Critério 2', '3/5', '1', '3/2', '∛0,9 = 0,9655'],
+                  ['Critério 3', '2/5', '2/3', '1', '∛0,2667 = 0,6437'],
+                ]}
+              />
+              <P>
+                Soma das médias = 3,2184 → pesos 1,6092 ÷ 3,2184 = <strong>0,5</strong>; 0,9655 ÷
+                3,2184 = <strong>0,3</strong>; 0,6437 ÷ 3,2184 = <strong>0,2</strong>. A·w = (1,5;
+                0,9; 0,6) → (A·w)<sub>i</sub> ÷ w<sub>i</sub> = 3, 3, 3 → λmáx = 3; CI = (3 − 3) ÷ 2
+                = 0; CR = 0 ÷ 0,58 = <strong>0</strong>. Já comparações circulares (1 é 5 vezes mais
+                importante que 2, 2 é 5 vezes mais que 3, mas 3 é 3 vezes mais que 1) dão CR bem
+                acima de 0,10.
+              </P>
+            </Exemplo>
+
+            <H3>Estabilidade da classe</H3>
+            <P>
+              Pesos são escolhas, e escolhas têm margem de erro. A estabilidade responde: &quot;se
+              os pesos fossem um pouco diferentes, este item continuaria na mesma classe?&quot;
+            </P>
+            <Lista ordenada>
+              <li>
+                Repetir <strong>500 simulações</strong>. Em cada uma, cada peso ativo (maior que
+                zero) recebe uma perturbação sorteada uniformemente entre{' '}
+                <strong>−10 e +10 pontos percentuais</strong> (sem ficar negativo).
+              </li>
+              <li>Reescalar os pesos para somar 100%.</li>
+              <li>
+                Recalcular os scores e as classes pelo mesmo método, reaplicando as regras de piso e
+                a classe manual.
+              </li>
+              <li>Contar em quantas simulações a classe final do item se manteve.</li>
+            </Lista>
+            <Formula>estabilidade = simulações com a mesma classe ÷ 500</Formula>
+            <P>
+              O sorteio usa uma <strong>semente fixa</strong>: os mesmos dados e pesos dão sempre o
+              mesmo resultado. Itens com estabilidade <strong>abaixo de 70%</strong> são marcados
+              como instáveis: estão na fronteira entre duas classes e são os que merecem discussão
+              com a equipe. A estabilidade só existe no modo 1 (no modo 2 não há pesos). Com o
+              preset Clássico, só há um critério e todas as classes ficam 100% estáveis.
+            </P>
+          </Secao>
+
+          {/* ------------------------------------------------------------ 8 */}
           <Secao slug="previsao">
             <P>
               A previsão F é a demanda esperada <strong>por período</strong> (mês ou semana). Ela
@@ -881,7 +1350,7 @@ export default function Metodologia() {
             </P>
           </Secao>
 
-          {/* ------------------------------------------------------------ 8 */}
+          {/* ------------------------------------------------------------ 9 */}
           <Secao slug="parametros">
             <P>Notação usada nesta seção:</P>
             <Formula>
@@ -1003,7 +1472,7 @@ export default function Metodologia() {
             </P>
           </Secao>
 
-          {/* ------------------------------------------------------------ 9 */}
+          {/* ------------------------------------------------------------ 10 */}
           <Secao slug="reposicao">
             <Formula>posição de estoque = estoque_atual + Σ pedidos em aberto</Formula>
             <P>
@@ -1099,7 +1568,7 @@ export default function Metodologia() {
             </Nota>
           </Secao>
 
-          {/* ------------------------------------------------------------ 10 */}
+          {/* ------------------------------------------------------------ 11 */}
           <Secao slug="giro">
             <H3>Reconstrução do saldo histórico</H3>
             <P>
@@ -1162,7 +1631,7 @@ export default function Metodologia() {
             </P>
           </Secao>
 
-          {/* ------------------------------------------------------------ 11 */}
+          {/* ------------------------------------------------------------ 12 */}
           <Secao slug="mrp">
             <P>
               O MRP (planejamento das necessidades de materiais) projeta, semana a semana, quanto
@@ -1275,7 +1744,7 @@ export default function Metodologia() {
             </P>
           </Secao>
 
-          {/* ------------------------------------------------------------ 12 */}
+          {/* ------------------------------------------------------------ 13 */}
           <Secao slug="matematica">
             <P>
               Algumas ideias de cálculo, probabilidade e álgebra linear aparecem por trás dos
@@ -1510,7 +1979,7 @@ export default function Metodologia() {
             </P>
           </Secao>
 
-          {/* ------------------------------------------------------------ 13 */}
+          {/* ------------------------------------------------------------ 14 */}
           <Secao slug="qualidade">
             <P>
               Antes de calcular, cada linha é validada. <strong>Erros bloqueantes</strong> impedem o
@@ -1593,6 +2062,26 @@ export default function Metodologia() {
                   'Aviso',
                   'Código vazio, semana inválida ou quantidade não positiva: linha ignorada.',
                 ],
+                [
+                  'Multicritério: criticidade inválida',
+                  'Aviso',
+                  'Valor fora de Alta/Média/Baixa, A/B/C, V/E/D ou 1 a 5 (no item ou no equipamento): tratado como vazio.',
+                ],
+                [
+                  'Multicritério: linha de OndeUsado inválida',
+                  'Aviso',
+                  'Código sem cadastro ou campo vazio: linha ignorada. Equipamento fora da aba Equipamentos: conta, sem criticidade.',
+                ],
+                [
+                  'Multicritério: dado faltando',
+                  'Aviso',
+                  'Item sem dado num critério com peso recebe 0,5 (neutro); na matriz VED, sem criticidade vira Essencial.',
+                ],
+                [
+                  'Multicritério: classe manual sem justificativa',
+                  'Aviso',
+                  'A classe manual é aplicada; registre o motivo em justificativa_classe.',
+                ],
               ]}
             />
             <Formula>
@@ -1605,7 +2094,7 @@ export default function Metodologia() {
             </P>
           </Secao>
 
-          {/* ------------------------------------------------------------ 14 */}
+          {/* ------------------------------------------------------------ 15 */}
           <Secao slug="parametros-padrao">
             <P>
               Todos os parâmetros podem ser alterados no painel lateral. Os valores padrão, e o
@@ -1713,6 +2202,16 @@ export default function Metodologia() {
                   'AX 98% … CZ 85% (ver Parâmetros de reposição)',
                   'Mais proteção onde faltar custa caro e a demanda é previsível.',
                 ],
+                [
+                  'ABC multicritério',
+                  'Desligado; ao ligar: pontuação ponderada, posto percentil, preset Produção/MRP, mesma contagem do ABC por valor',
+                  'Começa comparável ao ABC por valor; a empresa ajusta critérios e pesos.',
+                ],
+                [
+                  'Estabilidade da classe',
+                  '500 simulações, pesos perturbados em até ±10 p.p.; instável abaixo de 70%',
+                  'Mostra quais itens estão na fronteira entre duas classes.',
+                ],
               ]}
             />
             <P>
@@ -1722,7 +2221,7 @@ export default function Metodologia() {
             </P>
           </Secao>
 
-          {/* ------------------------------------------------------------ 15 */}
+          {/* ------------------------------------------------------------ 16 */}
           <Secao slug="glossario">
             <dl className="mt-4 grid gap-x-6 gap-y-3 sm:grid-cols-[minmax(0,12rem)_minmax(0,1fr)]">
               {GLOSSARIO.map(([termo, definicao]) => (
@@ -1734,7 +2233,7 @@ export default function Metodologia() {
             </dl>
           </Secao>
 
-          {/* ------------------------------------------------------------ 16 */}
+          {/* ------------------------------------------------------------ 17 */}
           <Secao slug="referencias">
             <ol className="my-3 max-w-prose list-decimal space-y-2 pl-6 leading-relaxed">
               <li>
@@ -1768,6 +2267,23 @@ export default function Metodologia() {
                 SILVER, E. A.; PYKE, D. F.; THOMAS, D. J.{' '}
                 <em>Inventory and Production Management in Supply Chains</em>. 4. ed. Boca Raton:
                 CRC Press, 2017. (Estoque de segurança, função de perda normal, fill rate e MRP.)
+              </li>
+              <li>
+                FLORES, B. E.; WHYBARK, D. C. Multiple criteria ABC analysis.{' '}
+                <em>International Journal of Operations &amp; Production Management</em>, v. 6, n.
+                3, p. 38–46, 1986. FLORES, B. E.; WHYBARK, D. C. Implementing multiple criteria ABC
+                analysis. <em>Journal of Operations Management</em>, v. 7, n. 1–2, p. 79–85, 1987.
+                (Matriz bicritério ABC × criticidade.)
+              </li>
+              <li>
+                SAATY, T. L. <em>The Analytic Hierarchy Process</em>. New York: McGraw-Hill, 1980.
+                (Escala 1 a 9, pesos por comparação par a par e razão de consistência.)
+              </li>
+              <li>
+                RAMANATHAN, R. ABC inventory classification with multiple-criteria using weighted
+                linear optimization. <em>Computers &amp; Operations Research</em>, v. 33, n. 3, p.
+                695–700, 2006. (Alternativa em que cada item escolhe os pesos mais favoráveis a ele;
+                aqui os pesos são definidos pela empresa.)
               </li>
             </ol>
           </Secao>

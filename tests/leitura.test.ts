@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { gerarDemoIndustria, gerarDemoMontagem } from '../scripts/demo/dados'
 import { escreverDemo } from '../scripts/demo/escrever'
 import { processar } from '../src/engine/index'
+import { completarConfigMC } from '../src/engine/multicriterio'
 import { lerData, lerNumero, lerPercentual } from '../src/io/conversao'
 import { gerarModelo } from '../src/io/gerar-modelo'
 import {
@@ -168,6 +169,39 @@ describe('Planilhas .xlsx (modelo e demonstração)', () => {
     expect(r.qualidade.bloqueante).toBe(false)
   })
 
+  it('a planilha-modelo traz as colunas e abas do ABC multicritério', async () => {
+    const b = await gerarModelo(ExcelJS)
+    const wb = new ExcelJS.Workbook()
+    await wb.xlsx.load(b)
+    const nomes = wb.worksheets.map((w) => w.name)
+    expect(nomes).toContain('Equipamentos')
+    expect(nomes).toContain('OndeUsado')
+    const e = lerEntrada([{ nome: 'modelo.xlsx', dados: b }])
+    expect(e.materiais[0]).toMatchObject({
+      fornecedor: 'Fornecedor Exemplo',
+      criticidade: 'Média',
+      numFornecedores: 2,
+      possuiSubstituto: true,
+      custoParadaHora: 800,
+      criterios: { seguranca: 2 },
+    })
+    expect(e.materiais[0].classeManual).toBeUndefined()
+    expect(e.equipamentos).toEqual([
+      expect.objectContaining({
+        equipamento: 'Prensa hidráulica PH-01',
+        criticidade: 'Alta',
+        setor: 'Estamparia',
+      }),
+    ])
+    expect(e.ondeUsado).toEqual([
+      expect.objectContaining({ codigo: 'PAR-M8X30', equipamento: 'Prensa hidráulica PH-01' }),
+    ])
+    const r = processar(e, { multicriterio: completarConfigMC({ ativo: true }) })
+    expect(r.qualidade.bloqueante).toBe(false)
+    // A criticidade do item (Média) prevalece sobre a do equipamento (Alta).
+    expect(r.itens[0].multicriterio?.criticidade).toBe(0.5)
+  })
+
   it('demo-industria: ~150 itens, 18 meses, mistura de padrões e problemas de qualidade', async () => {
     const dados = gerarDemoIndustria()
     const b = await escreverDemo(ExcelJS, dados, 'teste')
@@ -185,6 +219,35 @@ describe('Planilhas .xlsx (modelo e demonstração)', () => {
     for (const s of ['Ruptura', 'Comprar', 'Excesso', 'Sem giro', 'OK'])
       expect(status.has(s as never)).toBe(true)
     expect(r.itens.some((i) => i.classeXYZ === 'Novo')).toBe(true)
+  })
+
+  it('demo-industria: o ABC multicritério (Produção/MRP) muda classes de propósito', async () => {
+    const dados = gerarDemoIndustria()
+    const b = await escreverDemo(ExcelJS, dados, 'teste')
+    const e = lerEntrada([{ nome: 'demo-industria.xlsx', dados: b }])
+    expect(e.equipamentos!.length).toBeGreaterThanOrEqual(20)
+    expect(e.ondeUsado!.length).toBeGreaterThan(0)
+    const r = processar(e, { multicriterio: completarConfigMC({ ativo: true }) })
+    const mc = r.multicriterio!
+    expect(mc.subiram).toBeGreaterThanOrEqual(5)
+    expect(mc.desceram).toBeGreaterThanOrEqual(5)
+    // Itens de lead time longo, fonte única e máquina crítica sobem para A.
+    expect(
+      r.itens.some(
+        (i) =>
+          i.multicriterio?.mudou === 'subiu' &&
+          i.multicriterio.classeFinal === 'A' &&
+          i.leadTimeDias >= 60,
+      ),
+    ).toBe(true)
+    // Item com classe manual mantém a classe manual.
+    const manual = r.itens.filter((i) => i.multicriterio?.manual)
+    expect(manual).toHaveLength(1)
+    expect(manual[0].classeABC).toBe('A')
+    expect(manual[0].multicriterio?.justificativa).toMatch(/NR-12/)
+    // Alguns itens sem criticidade nenhuma: valor neutro 0,5 com aviso.
+    expect(r.qualidade.contagemPorRegra.mc_dado_faltando).toBeGreaterThan(0)
+    expect(r.qualidade.bloqueante).toBe(false)
   })
 
   it('demo-montagem: BOM de 3 níveis e MPS de 12 semanas explodem no MRP', async () => {

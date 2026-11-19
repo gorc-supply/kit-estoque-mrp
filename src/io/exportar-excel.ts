@@ -13,9 +13,12 @@ import type ExcelJS from 'exceljs'
 import { formatarData } from '../engine/datas'
 import { arredondarQuantidade } from '../engine/estatistica'
 import { sugestoesOrdenadas } from '../engine/index'
+import { descreverRegra, NOME_VED, nomeCriterio, rotuloCriticidade } from '../engine/multicriterio'
 import { DESCRICAO_REGRA } from '../engine/qualidade'
 import type {
   ClasseABC,
+  ConfigMulticriterio,
+  IdCriterio,
   ItemResultado,
   KPIs,
   Parametros,
@@ -58,6 +61,7 @@ export const ABAS_SAIDA = [
   'Leia-me',
   'Dashboard',
   'ABC-XYZ',
+  'ABC_Multicriterio',
   'Parametros_Reposicao',
   'Sugestao_Compras',
   'MRP_Semanal',
@@ -66,6 +70,10 @@ export const ABAS_SAIDA = [
   'Qualidade_Dados',
   'Parametros_Usados',
 ] as const
+
+/** Texto da aba ABC_Multicriterio quando o módulo está desligado. */
+export const MENSAGEM_MC_DESLIGADO =
+  'Classificação multicritério desligada. Ligue em ABC-XYZ → Classificar por: Multicritério na ferramenta.'
 
 // ---------------------------------------------------------------------------
 // Paleta (seção 10), em ARGB
@@ -90,6 +98,11 @@ export const COR_CLASSE: Record<ClasseABC, { fundo: string; texto: string }> = {
   B: { fundo: 'FF60A5FA', texto: TEXTO_ESCURO },
   C: { fundo: 'FF94A3B8', texto: TEXTO_ESCURO },
 }
+
+/** Vermelho claro para destacar valores que merecem atenção (preenchimento direto). */
+const FUNDO_ALERTA = 'FFFECACA'
+const TEXTO_ALERTA = 'FF991B1B'
+const FMT_3 = '0.000'
 
 const COR_PRIORIDADE: Partial<Record<Prioridade, { fundo: string; texto: string }>> = {
   Urgente: { fundo: 'FFDC2626', texto: BRANCO },
@@ -195,6 +208,24 @@ const ROTULO_ORIGEM_NB: Record<RegistroMRP['origemNB'], string> = {
   'mps+dependente': 'MPS + dependente',
 }
 
+const ROTULO_MODO_MC: Record<ConfigMulticriterio['modo'], string> = {
+  ponderado: 'Pontuação ponderada',
+  ved: 'Matriz ABC por valor × criticidade (VED)',
+}
+
+const ROTULO_NORMALIZACAO: Record<ConfigMulticriterio['normalizacao'], string> = {
+  posto: 'Posto percentil',
+  minmax: 'Mín-máx',
+}
+
+const ROTULO_METODO_CLASSES: Record<ConfigMulticriterio['metodoClasses'], string> = {
+  mesma_contagem: 'Mesma quantidade de itens em A, B e C que o ABC por valor',
+  percentual: 'Percentual de itens por classe',
+  cortes: 'Cortes de score',
+}
+
+const ORDEM_CLASSE: Record<ClasseABC, number> = { A: 0, B: 1, C: 2 }
+
 // ---------------------------------------------------------------------------
 // Exportação
 
@@ -213,6 +244,7 @@ export async function exportarExcel(
   abaLeiaMe(wb, r, opcoes, hoje)
   abaDashboard(wb, r, opcoes.imagens ?? [])
   abaABCXYZ(wb, r)
+  abaABCMulticriterio(wb, r)
   abaParametrosReposicao(wb, r)
   abaSugestaoCompras(wb, r, opcoes.codigosCompras)
   abaMRPSemanal(wb, r, porCodigo)
@@ -290,7 +322,13 @@ function abaLeiaMe(wb: ExcelJS.Workbook, r: Resultado, opcoes: OpcoesExportacao,
     ['Dashboard', 'Indicadores principais (KPIs) e imagens dos gráficos do painel.'],
     [
       'ABC-XYZ',
-      'Classificação de cada item: consumo, participação, % acumulado, classe ABC (valor de consumo anualizado), média, desvio, CV, classe XYZ, ADI, CV², padrão de demanda (Syntetos-Boylan) e classe combinada.',
+      'Classificação de cada item: consumo, participação, % acumulado, classe ABC (valor de consumo anualizado), média, desvio, CV, classe XYZ, ADI, CV², padrão de demanda (Syntetos-Boylan) e classe combinada. Com o ABC multicritério ligado, a classe ABC é a final e a classe por valor aparece ao lado.',
+    ],
+    [
+      'ABC_Multicriterio',
+      r.multicriterio
+        ? 'ABC multicritério: para cada critério o valor bruto, o normalizado (0–1), o peso e a contribuição; score, posição, classe por valor, classe final, regra de piso, classe manual, quem subiu (↑) ou desceu (↓), motivo e estabilidade da classe. No modo VED: criticidade, classe VED e classes.'
+        : 'ABC multicritério (desligado nesta exportação: a classe ABC é só por valor de consumo).',
     ],
     [
       'Parametros_Reposicao',
@@ -313,7 +351,10 @@ function abaLeiaMe(wb: ExcelJS.Workbook, r: Resultado, opcoes: OpcoesExportacao,
       'Rupturas, riscos antes da chegada, liberações em atraso, críticos, excesso, sem giro e inconsistências.',
     ],
     ['Qualidade_Dados', 'Validações dos dados de entrada, com aba e linha de origem.'],
-    ['Parametros_Usados', 'Todos os parâmetros globais do cálculo e a matriz de nível de serviço.'],
+    [
+      'Parametros_Usados',
+      'Todos os parâmetros globais do cálculo, a matriz de nível de serviço e a configuração do ABC multicritério (modo, pesos, regras de piso, matriz VED e AHP).',
+    ],
   ]
   for (const [a, b] of abas) par(a, b)
 
@@ -333,6 +374,12 @@ function abaLeiaMe(wb: ExcelJS.Workbook, r: Resultado, opcoes: OpcoesExportacao,
     'Política de lote no MRP',
     `${ROTULO_POLITICA[p.politicaLote]}; horizonte de ${p.horizonteMRP} semanas`,
   )
+  par(
+    'ABC multicritério',
+    r.multicriterio
+      ? `Ligado — ${ROTULO_MODO_MC[r.multicriterio.config.modo]} (${r.multicriterio.subiram} itens subiram e ${r.multicriterio.desceram} desceram de classe)`
+      : 'Desligado (classe ABC só por valor de consumo)',
+  )
   par('Lista completa', 'Ver a aba Parametros_Usados (inclui a matriz de nível de serviço).')
 
   secao('Como cada número é calculado')
@@ -348,6 +395,10 @@ function abaLeiaMe(wb: ExcelJS.Workbook, r: Resultado, opcoes: OpcoesExportacao,
     [
       'Classe XYZ',
       'CV = σ ÷ média. X se CV ≤ corte X; Y se CV ≤ corte Y; Z acima. N = sem demanda; Novo = menos períodos que o mínimo.',
+    ],
+    [
+      'ABC multicritério',
+      'Score S = Σ (peso × valor normalizado), com os pesos somando 100%. Cada critério é normalizado para 0–1 (1 = mais crítico) pelo posto percentil = (posição no ranking crescente − 1) ÷ (n − 1), empates com a média dos postos (alternativa: mín-máx); dado faltando vale 0,5. Itens ordenados pelo score recebem A, B e C (padrão: mesma quantidade de itens por classe do ABC por valor). Regras de piso e classe manual prevalecem. No modo VED, a classe final sai da matriz classe por valor × criticidade. Quando ligado, a classe final substitui a classe por valor em todo o cálculo (nível de serviço, prioridades, KPIs).',
     ],
     [
       'Padrão de demanda',
@@ -656,6 +707,8 @@ function abaDashboard(
 // 3. ABC-XYZ
 
 function abaABCXYZ(wb: ExcelJS.Workbook, r: Resultado): void {
+  // Com o multicritério ligado, a classe ABC é a final e a classe por valor vem logo ao lado.
+  const comMC = r.multicriterio !== null
   const ws = criarAbaTabela(wb, 'ABC-XYZ', [
     { cabecalho: 'Item', largura: 14 },
     { cabecalho: 'Descrição', largura: 40 },
@@ -666,7 +719,8 @@ function abaABCXYZ(wb: ExcelJS.Workbook, r: Resultado): void {
     { cabecalho: 'Consumo anual (R$)', largura: 18, formato: FMT_MOEDA },
     { cabecalho: '% do consumo', largura: 12, formato: FMT_PCT },
     { cabecalho: '% acumulado', largura: 12, formato: FMT_PCT },
-    { cabecalho: 'Classe ABC', largura: 10 },
+    { cabecalho: comMC ? 'Classe ABC (final)' : 'Classe ABC', largura: 10 },
+    ...(comMC ? [{ cabecalho: 'Classe por valor', largura: 10 }] : []),
     { cabecalho: 'Média (d̄)', largura: 12, formato: FMT_DEC2 },
     { cabecalho: 'Desvio (σ)', largura: 12, formato: FMT_DEC2 },
     { cabecalho: 'CV', largura: 9, formato: FMT_DEC2 },
@@ -689,6 +743,7 @@ function abaABCXYZ(wb: ExcelJS.Workbook, r: Resultado): void {
       n(i.pctConsumo),
       n(i.pctAcumulado),
       i.classeABC,
+      ...(comMC ? [i.classeABCValor] : []),
       n(i.media, 4),
       n(i.desvio, 4),
       n(i.cv, 4),
@@ -698,12 +753,176 @@ function abaABCXYZ(wb: ExcelJS.Workbook, r: Resultado): void {
       i.padrao ?? '',
       i.classeCombinada,
     ])
+    const d = comMC ? 1 : 0 // deslocamento das colunas depois da classe
     l.getCell(5).numFmt = fmtQtd(i.unidadeDiscreta)
-    for (const c of [10, 18]) {
+    for (const c of [10, 18 + d]) {
       pintar(l.getCell(c), COR_CLASSE[i.classeABC], true)
       l.getCell(c).alignment = { horizontal: 'center' }
     }
-    l.getCell(14).alignment = { horizontal: 'center' }
+    if (comMC) {
+      pintar(l.getCell(11), COR_CLASSE[i.classeABCValor], true)
+      l.getCell(11).alignment = { horizontal: 'center' }
+    }
+    l.getCell(14 + d).alignment = { horizontal: 'center' }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 3-B. ABC_Multicriterio (seção 16-B)
+
+/** Formato do valor bruto de um critério numérico. */
+function fmtBruto(id: IdCriterio, v: number): string {
+  if (id === 'valor' || id === 'custo_parada') return FMT_MOEDA
+  if (id === 'cv') return FMT_DEC2
+  return fmtPorValor(v)
+}
+
+function pintarClasse(cell: ExcelJS.Cell, classe: ClasseABC): void {
+  pintar(cell, COR_CLASSE[classe], true)
+  cell.alignment = { horizontal: 'center' }
+}
+
+function marcarMudanca(cell: ExcelJS.Cell, mudou: 'subiu' | 'desceu' | null): void {
+  cell.value = mudou === 'subiu' ? '↑' : mudou === 'desceu' ? '↓' : ''
+  cell.alignment = { horizontal: 'center' }
+  if (mudou)
+    cell.font = { bold: true, color: { argb: mudou === 'subiu' ? 'FF16A34A' : 'FFDC2626' } }
+}
+
+function abaABCMulticriterio(wb: ExcelJS.Workbook, r: Resultado): void {
+  const mc = r.multicriterio
+  if (!mc) {
+    const ws = wb.addWorksheet('ABC_Multicriterio', { properties: { tabColor: { argb: COR_ACO } } })
+    ws.getColumn(1).width = 110
+    const c = ws.getCell('A1')
+    c.value = MENSAGEM_MC_DESLIGADO
+    c.font = { bold: true, color: { argb: COR_MARINHO } }
+    c.alignment = { wrapText: true }
+    return
+  }
+  const itens = r.itens.filter(
+    (i): i is ItemResultado & { multicriterio: NonNullable<ItemResultado['multicriterio']> } =>
+      i.multicriterio !== null,
+  )
+
+  if (mc.config.modo === 'ved') {
+    const ws = criarAbaTabela(wb, 'ABC_Multicriterio', [
+      { cabecalho: 'Item', largura: 14 }, // 1
+      { cabecalho: 'Descrição', largura: 36 }, // 2
+      { cabecalho: 'Criticidade', largura: 14 }, // 3
+      { cabecalho: 'VED', largura: 12 }, // 4
+      { cabecalho: 'Classe por valor', largura: 10 }, // 5
+      { cabecalho: 'Classe final', largura: 10 }, // 6
+      { cabecalho: 'Regra de piso aplicada', largura: 40 }, // 7
+      { cabecalho: 'Classe manual', largura: 9 }, // 8
+      { cabecalho: 'Justificativa', largura: 36 }, // 9
+      { cabecalho: 'Mudou?', largura: 8 }, // 10
+      { cabecalho: 'Motivo', largura: 80 }, // 11
+    ])
+    ws.views = [{ state: 'frozen', xSplit: 2, ySplit: 1 }]
+    const ordenados = [...itens].sort(
+      (a, b) =>
+        ORDEM_CLASSE[a.multicriterio.classeFinal] - ORDEM_CLASSE[b.multicriterio.classeFinal] ||
+        b.consumoAnualValor - a.consumoAnualValor ||
+        (a.codigo < b.codigo ? -1 : 1),
+    )
+    for (const i of ordenados) {
+      const m = i.multicriterio
+      const l = ws.addRow([
+        i.codigo,
+        i.descricao,
+        rotuloCriticidade(m.criticidade),
+        NOME_VED[m.ved],
+        m.classeValor,
+        m.classeFinal,
+        m.regraAplicada ?? '',
+        m.manual ? 'Sim' : '',
+        m.justificativa ?? '',
+        '',
+        m.motivo,
+      ])
+      l.getCell(4).alignment = { horizontal: 'center' }
+      pintarClasse(l.getCell(5), m.classeValor)
+      pintarClasse(l.getCell(6), m.classeFinal)
+      l.getCell(8).alignment = { horizontal: 'center' }
+      marcarMudanca(l.getCell(10), m.mudou)
+    }
+    return
+  }
+
+  // Modo ponderado: 4 colunas por critério, na ordem dos pesos efetivos.
+  const ids = Object.keys(mc.pesos)
+  const ws = criarAbaTabela(wb, 'ABC_Multicriterio', [
+    { cabecalho: 'Item', largura: 14 },
+    { cabecalho: 'Descrição', largura: 36 },
+    ...ids.flatMap((id) => {
+      const nome = nomeCriterio(id)
+      // O valor bruto do critério "Sem substituto" é a coluna possui_substituto (Sim/Não).
+      const nomeBruto = id === 'substituto' ? 'Possui substituto' : nome
+      return [
+        { cabecalho: `${nomeBruto} (bruto)`, largura: 16 },
+        { cabecalho: `${nome} (normalizado)`, largura: 13, formato: FMT_3 },
+        { cabecalho: `${nome} (peso)`, largura: 11, formato: FMT_PCT },
+        { cabecalho: `${nome} (contribuição)`, largura: 13, formato: FMT_3 },
+      ]
+    }),
+    { cabecalho: 'Score', largura: 9, formato: FMT_3 },
+    { cabecalho: 'Posição', largura: 9, formato: FMT_INT },
+    { cabecalho: 'Classe por valor', largura: 10 },
+    { cabecalho: 'Classe final', largura: 10 },
+    { cabecalho: 'Regra de piso aplicada', largura: 40 },
+    { cabecalho: 'Classe manual', largura: 9 },
+    { cabecalho: 'Justificativa', largura: 36 },
+    { cabecalho: 'Mudou?', largura: 8 },
+    { cabecalho: 'Motivo', largura: 90 },
+    { cabecalho: 'Estabilidade', largura: 11, formato: FMT_PCT },
+  ])
+  ws.views = [{ state: 'frozen', xSplit: 2, ySplit: 1 }]
+  const c0 = 3 + 4 * ids.length // primeira coluna depois dos critérios (Score)
+  const ordenados = [...itens].sort(
+    (a, b) =>
+      (a.multicriterio.posicao ?? Number.MAX_SAFE_INTEGER) -
+        (b.multicriterio.posicao ?? Number.MAX_SAFE_INTEGER) || (a.codigo < b.codigo ? -1 : 1),
+  )
+  for (const i of ordenados) {
+    const m = i.multicriterio
+    const porId = new Map(m.criterios.map((c) => [c.id, c]))
+    const valores: ExcelJS.CellValue[] = [i.codigo, i.descricao]
+    for (const id of ids) {
+      const c = porId.get(id)
+      const bruto =
+        !c || c.bruto === null
+          ? 'sem dado'
+          : typeof c.bruto === 'number'
+            ? n(c.bruto, id === 'valor' || id === 'custo_parada' ? 2 : 4)
+            : c.bruto
+      valores.push(bruto, n(c?.normalizado), n(c?.peso), n(c?.contribuicao))
+    }
+    valores.push(
+      n(m.score),
+      n(m.posicao),
+      m.classeValor,
+      m.classeFinal,
+      m.regraAplicada ?? '',
+      m.manual ? 'Sim' : '',
+      m.justificativa ?? '',
+      '',
+      m.motivo,
+      n(m.estabilidade),
+    )
+    const l = ws.addRow(valores)
+    ids.forEach((id, k) => {
+      const cel = l.getCell(3 + 4 * k)
+      if (typeof cel.value === 'number') cel.numFmt = fmtBruto(id, cel.value)
+      else if (cel.value === 'sem dado') cel.font = { italic: true, color: { argb: CINZA_NOTA } }
+      else cel.alignment = { horizontal: 'center' }
+    })
+    pintarClasse(l.getCell(c0 + 2), m.classeValor)
+    pintarClasse(l.getCell(c0 + 3), m.classeFinal)
+    l.getCell(c0 + 5).alignment = { horizontal: 'center' }
+    marcarMudanca(l.getCell(c0 + 7), m.mudou)
+    if (m.estabilidade !== null && m.estabilidade < 0.7)
+      pintar(l.getCell(c0 + 9), { fundo: FUNDO_ALERTA, texto: TEXTO_ALERTA }, true)
   }
 }
 
@@ -1278,6 +1497,157 @@ function abaParametrosUsados(wb: ExcelJS.Workbook, r: Resultado): void {
     for (let c = 2; c <= 4; c++) {
       l.getCell(c).numFmt = FMT_PCT
       l.getCell(c).alignment = { horizontal: 'center' }
+    }
+  }
+
+  blocoMulticriterio(ws, r)
+}
+
+/** Bloco "ABC multicritério" da aba Parametros_Usados (seção 16-B, "Saída Excel"). */
+function blocoMulticriterio(ws: ExcelJS.Worksheet, r: Resultado): void {
+  const mc = r.multicriterio
+  const titulo = (texto: string, tamanho = 12) => {
+    ws.addRow([])
+    ws.addRow([texto]).font = { bold: true, size: tamanho, color: { argb: COR_MARINHO } }
+  }
+  const linha = (rotulo: string, valor: ExcelJS.CellValue, formato?: string, obs = '') => {
+    const l = ws.addRow([rotulo, typeof valor === 'number' ? n(valor) : valor, obs])
+    if (formato) l.getCell(2).numFmt = formato
+    l.getCell(2).alignment = { horizontal: 'left' }
+    return l
+  }
+
+  titulo('ABC multicritério', 13)
+  linha(
+    'Ligado',
+    simNao(mc !== null),
+    undefined,
+    mc
+      ? 'A classe final substitui a classe por valor na matriz ABC×XYZ, no nível de serviço, nas prioridades de compra e nos KPIs.'
+      : 'Classe ABC só por valor de consumo anual.',
+  )
+  if (!mc) return
+  const cfg = mc.config
+  const ponderado = cfg.modo === 'ponderado'
+  linha('Modo', ROTULO_MODO_MC[cfg.modo])
+  if (ponderado) {
+    linha(
+      'Normalização',
+      ROTULO_NORMALIZACAO[cfg.normalizacao],
+      undefined,
+      cfg.normalizacao === 'posto'
+        ? '(posição no ranking crescente − 1) ÷ (n − 1), empates com a média dos postos; 1 = mais crítico; dado faltando = 0,5'
+        : '(x − mín) ÷ (máx − mín); 1 = mais crítico; dado faltando = 0,5',
+    )
+    linha(
+      'Método de classes',
+      ROTULO_METODO_CLASSES[cfg.metodoClasses],
+      undefined,
+      'Score S = Σ peso × valor normalizado',
+    )
+    if (cfg.metodoClasses === 'percentual') {
+      linha('Itens em A (% dos itens)', cfg.percentuais.A, FMT_PCT)
+      linha('Itens em B (% dos itens)', cfg.percentuais.B, FMT_PCT, 'C no restante')
+    } else if (cfg.metodoClasses === 'cortes') {
+      linha('Corte de score — classe A (S ≥)', cfg.cortes.A, FMT_3)
+      linha('Corte de score — classe B (S ≥)', cfg.cortes.B, FMT_3, 'C abaixo')
+    }
+    linha(
+      'Simulações de estabilidade',
+      cfg.simulacoes,
+      FMT_INT,
+      'Cada peso perturbado ao acaso e renormalizado para 100%',
+    )
+    linha(
+      'Perturbação máxima de cada peso (± p.p.)',
+      cfg.perturbacao,
+      FMT_PCT,
+      'Classe instável: mantida em menos de 70% das simulações',
+    )
+  }
+  linha('Itens que subiram de classe', mc.subiram, FMT_INT)
+  linha('Itens que desceram de classe', mc.desceram, FMT_INT)
+  if (ponderado) linha('Itens com classe instável', mc.instaveis, FMT_INT)
+
+  // Pesos efetivos (renormalizados) e direção de cada critério.
+  if (ponderado) {
+    titulo('Pesos dos critérios (efetivos, somando 100%)')
+    estilizarCabecalho(ws.addRow(['Critério', 'Peso', 'Direção / observação']))
+    for (const c of mc.criterios) {
+      const peso = mc.pesos[c.id] ?? 0
+      const partes = [c.direcao === 'menor' ? 'Menor = mais crítico' : 'Maior = mais crítico']
+      if (c.id.startsWith('crit_'))
+        partes.push(`critério próprio (${c.id}), direção escolhida na tela`)
+      partes.push(`${c.itensComDado} itens com dado`)
+      if (c.id === 'cv' && peso > 0)
+        partes.push('atenção: a variabilidade já é o eixo XYZ e conta duas vezes no score')
+      linha(c.nome, peso, FMT_PCT, partes.join('; '))
+    }
+  }
+
+  // Regras de piso.
+  titulo('Regras de piso')
+  estilizarCabecalho(ws.addRow(['Regra', 'Ativa', 'Itens afetados']))
+  if (cfg.regras.length === 0)
+    ws.addRow(['Nenhuma regra de piso cadastrada.']).font = { italic: true }
+  for (const rg of cfg.regras) {
+    const texto = descreverRegra(rg)
+    const afetados = r.itens.filter((i) => i.multicriterio?.regraAplicada === texto).length
+    linha(
+      texto,
+      simNao(rg.ativa),
+      undefined,
+      rg.ativa ? `${afetados} item(ns) subiram por esta regra` : '',
+    )
+  }
+
+  // Matriz VED (modo 2).
+  if (cfg.modo === 'ved') {
+    titulo('Matriz ABC por valor × criticidade (VED)')
+    estilizarCabecalho(
+      ws.addRow(['Classe por valor', 'Vital (V)', 'Essencial (E)', 'Desejável (D)']),
+    )
+    for (const abc of ['A', 'B', 'C'] as const) {
+      const l = ws.addRow([abc, cfg.matrizVED[abc].V, cfg.matrizVED[abc].E, cfg.matrizVED[abc].D])
+      pintarClasse(l.getCell(1), abc)
+      for (const [k, ved] of (['V', 'E', 'D'] as const).entries())
+        pintarClasse(l.getCell(2 + k), cfg.matrizVED[abc][ved])
+    }
+  }
+
+  // Assistente AHP (Saaty), se usado.
+  const ahp = cfg.ahp
+  if (ahp) {
+    const nomes = ahp.criterios.map(nomeCriterio)
+    titulo('Assistente AHP — comparações par a par (escala de Saaty, linha ÷ coluna)')
+    estilizarCabecalho(ws.addRow(['Critério', ...nomes, 'Peso AHP']))
+    for (let c = 4; c <= nomes.length + 2; c++)
+      ws.getColumn(c).width = Math.max(ws.getColumn(c).width ?? 0, 14)
+    ahp.matriz.forEach((linhaM, i) => {
+      const l = ws.addRow([nomes[i], ...linhaM.map((x) => n(x, 6)), n(ahp.pesos[i])])
+      l.getCell(1).font = { bold: true }
+      for (let c = 2; c <= nomes.length + 1; c++) {
+        l.getCell(c).numFmt = FMT_3
+        l.getCell(c).alignment = { horizontal: 'center' }
+      }
+      l.getCell(nomes.length + 2).numFmt = FMT_PCT
+      l.getCell(nomes.length + 2).alignment = { horizontal: 'center' }
+    })
+    ws.addRow([])
+    linha('λmáx', ahp.lambdaMax, FMT_3, 'Média de (A·w)ᵢ ÷ wᵢ')
+    linha('CI', ahp.ci, FMT_3, 'CI = (λmáx − n) ÷ (n − 1)')
+    const incoerente = ahp.cr > 0.1
+    const lCR = linha(
+      'CR',
+      ahp.cr,
+      FMT_3,
+      incoerente
+        ? 'CR > 0,10: comparações incoerentes. Revise os pares no assistente AHP.'
+        : 'CR = CI ÷ RI; até 0,10 as comparações são consideradas coerentes.',
+    )
+    if (incoerente) {
+      pintar(lCR.getCell(2), { fundo: FUNDO_ALERTA, texto: TEXTO_ALERTA }, true)
+      lCR.getCell(3).font = { bold: true, color: { argb: TEXTO_ALERTA } }
     }
   }
 }

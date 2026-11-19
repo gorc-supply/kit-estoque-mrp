@@ -20,6 +20,7 @@ function validacoes(ws: ExcelJS.Worksheet) {
 }
 
 const UNIDADES = 'UN,PC,CX,PCT,PAR,KG,G,L,ML,M,M2,M3'
+const CRITICIDADES = '"Alta,Média,Baixa"'
 
 export async function gerarModelo(Excel: ModuloExcel): Promise<ArrayBuffer> {
   const wb = new Excel.Workbook()
@@ -66,6 +67,36 @@ export async function gerarModelo(Excel: ModuloExcel): Promise<ArrayBuffer> {
       'Cabeçalhos',
       'Os nomes das colunas podem variar (ex.: "cód", "SKU", "qtd"). Se o app não reconhecer, ele pede para você indicar qual coluna é qual.',
     ],
+    [
+      'ABC multicritério (opcional)',
+      'Colunas e abas abaixo são todas opcionais. Servem para classificar os itens também por criticidade, lead time, fornecedores e critérios da sua empresa, não só pelo valor de consumo. Sem elas, a ferramenta funciona normalmente (ABC por valor).',
+    ],
+    [
+      'criticidade',
+      'Quão crítico é o item para a operação. Aceita Alta/Média/Baixa, A/B/C, V/E/D (Vital/Essencial/Desejável) ou escala de 1 a 5 (5 = mais crítico). Se preenchida no item, prevalece sobre a criticidade dos equipamentos.',
+    ],
+    [
+      'num_fornecedores',
+      'Quantos fornecedores aprovados o item tem (1 = fonte única, mais risco).',
+    ],
+    ['possui_substituto', 'Sim ou Não. Item sem substituto é mais crítico.'],
+    ['custo_parada_hora', 'Custo, em R$ por hora, de a máquina parar por falta do item.'],
+    [
+      'classe_manual',
+      'A, B ou C. Substitui a classe calculada; exige justificativa_classe (o motivo aparece na planilha de saída).',
+    ],
+    [
+      'crit_<nome>',
+      'Qualquer critério próprio da empresa, como número (ex.: crit_seguranca, crit_qualidade). Crie quantas colunas quiser com o prefixo crit_; na tela você escolhe o peso e se maior ou menor é mais crítico.',
+    ],
+    [
+      'Equipamentos (opcional)',
+      'Máquinas e sua criticidade: equipamento, criticidade (mesmos formatos acima), setor.',
+    ],
+    [
+      'OndeUsado (opcional)',
+      'Em quais equipamentos cada item é usado: codigo, equipamento (uma linha por par; um item pode servir a várias máquinas). Sem criticidade no item, vale a maior criticidade entre os equipamentos que ele atende.',
+    ],
     ['Exemplo', 'Cada aba traz uma linha de exemplo. Apague e cole os seus dados.'],
   ]
   for (const [a, b] of linhas) {
@@ -90,6 +121,14 @@ export async function gerarModelo(Excel: ModuloExcel): Promise<ArrayBuffer> {
     { cabecalho: 'categoria', largura: 16 },
     { cabecalho: 'tipo_item', largura: 12 },
     { cabecalho: 'data_cadastro', largura: 14, formato: FMT_DATA },
+    // ABC multicritério (seção 16-B), opcionais
+    { cabecalho: 'criticidade', largura: 13 },
+    { cabecalho: 'num_fornecedores', largura: 17 },
+    { cabecalho: 'possui_substituto', largura: 17 },
+    { cabecalho: 'custo_parada_hora', largura: 18, formato: FMT_MOEDA },
+    { cabecalho: 'classe_manual', largura: 14 },
+    { cabecalho: 'justificativa_classe', largura: 36 },
+    { cabecalho: 'crit_seguranca', largura: 15 },
   ])
   mat.addRow([
     'PAR-M8X30',
@@ -106,6 +145,13 @@ export async function gerarModelo(Excel: ModuloExcel): Promise<ArrayBuffer> {
     'Componentes',
     'Comprado',
     new Date(Date.UTC(2023, 0, 10)),
+    'Média',
+    2,
+    'Sim',
+    800,
+    null,
+    null,
+    2,
   ])
   validacoes(mat).add('C2:C10000', { type: 'list', allowBlank: true, formulae: [`"${UNIDADES}"`] })
   validacoes(mat).add('M2:M10000', {
@@ -113,6 +159,10 @@ export async function gerarModelo(Excel: ModuloExcel): Promise<ArrayBuffer> {
     allowBlank: true,
     formulae: ['"Comprado,Fabricado"'],
   })
+  // Listas suspensas sem bloqueio: a criticidade também aceita A/B/C, V/E/D e 1 a 5.
+  validacoes(mat).add('O2:O10000', { type: 'list', allowBlank: true, formulae: [CRITICIDADES] })
+  validacoes(mat).add('Q2:Q10000', { type: 'list', allowBlank: true, formulae: ['"Sim,Não"'] })
+  validacoes(mat).add('S2:S10000', { type: 'list', allowBlank: true, formulae: ['"A,B,C"'] })
 
   // Movimentações
   const mov = criarAbaTabela(wb, 'Movimentacoes', [
@@ -154,6 +204,21 @@ export async function gerarModelo(Excel: ModuloExcel): Promise<ArrayBuffer> {
     { cabecalho: 'quantidade', largura: 12 },
   ])
   mps.addRow(['PROD-01', new Date(Date.UTC(2025, 1, 3)), 50])
+
+  // ABC multicritério (seção 16-B)
+  const eq = criarAbaTabela(wb, 'Equipamentos', [
+    { cabecalho: 'equipamento', largura: 30 },
+    { cabecalho: 'criticidade', largura: 13 },
+    { cabecalho: 'setor', largura: 18 },
+  ])
+  eq.addRow(['Prensa hidráulica PH-01', 'Alta', 'Estamparia'])
+  validacoes(eq).add('B2:B10000', { type: 'list', allowBlank: true, formulae: [CRITICIDADES] })
+
+  const ou = criarAbaTabela(wb, 'OndeUsado', [
+    { cabecalho: 'codigo', largura: 14 },
+    { cabecalho: 'equipamento', largura: 30 },
+  ])
+  ou.addRow(['PAR-M8X30', 'Prensa hidráulica PH-01'])
 
   return (await wb.xlsx.writeBuffer()) as ArrayBuffer
 }

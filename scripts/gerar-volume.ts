@@ -11,7 +11,15 @@ import { escreverDemo } from './demo/escrever.ts'
 const saida = process.argv[2] ?? 'volume-100k.xlsx'
 const rng = criarRng(21)
 const inicio = Date.UTC(2025, 4, 1)
-const dados: DadosDemo = { materiais: [], movimentacoes: [], pedidos: [], bom: [], mps: [] }
+const dados: DadosDemo = {
+  materiais: [],
+  movimentacoes: [],
+  pedidos: [],
+  bom: [],
+  mps: [],
+  equipamentos: [],
+  ondeUsado: [],
+}
 for (let i = 0; i < 2000; i++) {
   dados.materiais.push({
     codigo: `IT${String(i).padStart(5, '0')}`,
@@ -28,6 +36,13 @@ for (let i = 0; i < 2000; i++) {
     categoria: `Categoria ${i % 8}`,
     tipo_item: 'Comprado',
     data_cadastro: null,
+    criticidade: null,
+    num_fornecedores: null,
+    possui_substituto: null,
+    custo_parada_hora: null,
+    classe_manual: null,
+    justificativa_classe: null,
+    crit_seguranca: null,
   })
 }
 const movs: MovimentoDemo[] = []
