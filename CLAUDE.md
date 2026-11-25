@@ -62,7 +62,8 @@ Use as versões estáveis mais recentes de cada pacote no momento da instalaçã
 ```
 kit-estoque-mrp/
 ├─ CLAUDE.md                  ← este arquivo
-├─ README.md
+├─ README.md                  ← em inglês
+├─ README.pt-BR.md            ← em português
 ├─ LICENSE                    ← MIT
 ├─ .github/workflows/deploy.yml
 ├─ public/
@@ -572,7 +573,7 @@ Os testes do `engine/` são o contrato de correção. Incluir no mínimo:
 - `vite.config.ts` com `base: '/kit-estoque-mrp/'` (ajustar se o nome do repo mudar).
 - Workflow `.github/workflows/deploy.yml`: em push na `main` → `npm ci` → `npm run lint` → `npm test` → `npm run build` → publicar `dist/` com as actions oficiais do GitHub Pages.
 - `index.html` com `<title>`, `meta description`, Open Graph (`og:title`, `og:description`, `og:image` absoluto apontando para a URL do Pages, `og:type`), Twitter card e `lang="pt-BR"`. A prévia do link no LinkedIn depende disso.
-- **README.md** (em português) com: banner, badges (build, licença), GIF/screenshot, "Experimente agora" com o link, o problema que resolve, funcionalidades, metodologia resumida com as fórmulas, formato da planilha de entrada, privacidade, stack, como rodar localmente, roadmap, autor com LinkedIn, licença MIT.
+- **README.md** em inglês e **README.pt-BR.md** em português, com a mesma estrutura e os mesmos números; qualquer mudança em um vai para o outro. Os dois com: banner, badges (build, licença), GIF/screenshot, "Experimente agora" com o link, o problema que resolve, funcionalidades, metodologia resumida com as fórmulas, formato da planilha de entrada, privacidade, stack, como rodar localmente, roadmap, autor com LinkedIn, licença MIT.
 - Sem rastreadores e sem cookies.
 
 ---
