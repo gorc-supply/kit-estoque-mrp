@@ -1,123 +1,125 @@
+**English** · [Português](README.pt-BR.md)
+
 <p align="center">
-  <img src="public/og-image.png" alt="Kit Estoque MRP — curva ABC-XYZ, reposição, compras e MRP a partir da sua planilha" width="760" />
+  <img src="public/og-image.png" alt="Kit Estoque MRP — ABC-XYZ analysis, replenishment, purchasing and MRP from your spreadsheet" width="760" />
 </p>
 
 <p align="center">
   <a href="https://github.com/gorc-supply/kit-estoque-mrp/actions/workflows/deploy.yml"><img alt="Build" src="https://github.com/gorc-supply/kit-estoque-mrp/actions/workflows/deploy.yml/badge.svg" /></a>
-  <a href="LICENSE"><img alt="Licença MIT" src="https://img.shields.io/badge/licen%C3%A7a-MIT-F59E0B" /></a>
-  <img alt="100% no navegador" src="https://img.shields.io/badge/dados-100%25%20no%20navegador-16A34A" />
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-F59E0B" /></a>
+  <img alt="100% in the browser" src="https://img.shields.io/badge/data-100%25%20in%20the%20browser-16A34A" />
 </p>
 
 # Kit Estoque MRP
 
-Suba sua planilha de estoque e receba **curva ABC-XYZ, parâmetros de reposição, sugestão de compras e MRP** em segundos — **de graça e sem seus dados saírem do computador**.
+Upload your inventory spreadsheet and get **ABC-XYZ analysis, replenishment parameters, purchase suggestions and MRP** in seconds — **free, and your data never leaves your computer**.
 
-### 👉 [Experimente agora](https://gorc-supply.github.io/kit-estoque-mrp/) · [abrir já com dados de exemplo](https://gorc-supply.github.io/kit-estoque-mrp/?demo=industria)
+### 👉 [Try it now](https://gorc-supply.github.io/kit-estoque-mrp/) · [open it with sample data](https://gorc-supply.github.io/kit-estoque-mrp/?demo=industria)
 
-![Visão geral com KPIs e gráficos](docs/img/visao-geral.png)
+![Overview with KPIs and charts](docs/img/visao-geral.png)
 
-## O problema que resolve
+## The problem it solves
 
-Comprador e planejador costumam decidir **quanto e quando comprar** com uma planilha de saldo e um feeling. Os métodos clássicos (curva ABC, estoque de segurança, ponto de pedido, lote econômico, MRP) estão nos livros, mas montar tudo isso em Excel para centenas de itens dá trabalho, quebra fácil e ninguém confere a conta.
+Buyers and planners often decide **how much and when to buy** with a stock balance spreadsheet and a gut feeling. The classic methods (ABC analysis, safety stock, reorder point, economic order quantity, MRP) are in the textbooks, but building all of that in Excel for hundreds of items takes work, breaks easily and nobody checks the math.
 
-O Kit Estoque MRP faz isso a partir da exportação que você já tem (cadastro de materiais + movimentações), mostra **cada número com a fórmula e os valores substituídos** ("Ver o cálculo") e devolve uma **planilha Excel pronta** para o dia a dia.
+Kit Estoque MRP does it from the export you already have (material master + stock movements), shows **every number with its formula and the values plugged in** ("Ver o cálculo", see the calculation) and returns a **ready-to-use Excel workbook** for day-to-day work.
 
-## Funcionalidades
+## Features
 
-- **Curva ABC** por valor de consumo anualizado (alternativas por quantidade e por valor em estoque), **XYZ** pelo coeficiente de variação e **padrão de demanda de Syntetos-Boylan** (suave, errático, intermitente, irregular), cruzados numa matriz 3×3 clicável com política recomendada por célula.
-- **ABC multicritério** (opcional): combina valor, lead time, criticidade (do item ou dos equipamentos que ele atende), nº de fornecedores, substituto, custo de parada e critérios próprios da empresa (`crit_*`) numa pontuação ponderada por posto percentil, ou na matriz ABC × criticidade (VED). Presets de pesos, sliders, **assistente AHP** com razão de consistência, regras de piso, classe manual com justificativa, **Sankey** "valor → final", tabela "quem mudou de classe e por quê" e **estabilidade** da classe em 500 simulações. A classe final passa a valer em todo o resto.
-- **Previsão** por média móvel (itens suaves/erráticos) ou **SBA — Croston corrigido** (intermitentes), com **backtest** (MAE, RMSE, WMAPE, viés) e modo automático que escolhe o método de menor erro.
-- **Parâmetros de reposição** por item: estoque de segurança (com ou sem variabilidade de prazo), ponto de pedido, lote econômico ajustado a lote mínimo e embalagem, estoque máximo, cobertura e giro.
-- **Sugestão de compras** com prioridade (urgente quando a cobertura não aguenta o lead time), total por fornecedor e exportação só das linhas selecionadas.
-- **MRP semanal** (registro time-phased como no MD04 do SAP): necessidade bruta, recebimentos programados, estoque projetado, necessidade líquida, recebimento e liberação planejados, com **liberação em atraso**. Com BOM e MPS, faz a **explosão em vários níveis** por código de nível mais baixo, detecta BOM circular e confere o total com a **matriz de requisitos totais** r = (I − B)⁻¹ d.
-- **A matemática por trás**: curva de custo total do lote (derivada = 0 no EOQ) e penalidade do arredondamento, distribuição da demanda no lead time e probabilidade de faltar antes da chegada, função de perda normal e **fill rate**, curva nível de serviço × custo do ES e similaridade de cosseno entre perfis de consumo.
-- **Qualidade dos dados**: relatório com cada problema e a linha de origem (código sem cadastro, data inválida ou futura, quantidade inválida, tipo desconhecido, duplicidades, saldo reconstruído negativo…).
-- **Mapeamento flexível de colunas**: reconhece sinônimos ("cód.", "SKU", "qtde", "prazo de entrega"…) e, se precisar, pede para você apontar as colunas — e lembra da escolha.
-- **Dashboard** com 14 KPIs clicáveis e 17 gráficos interativos (ECharts), modo claro e escuro, responsivo no celular.
-- **Planilha de saída (.xlsx)** com 11 abas formatadas: Leia-me, Dashboard (com os gráficos), ABC-XYZ, ABC multicritério, parâmetros, sugestão de compras, MRP semanal e consolidado, alertas, qualidade dos dados e parâmetros usados. Também exporta CSV de qualquer tabela e imprime/salva em PDF.
+- **ABC analysis** by annualized consumption value (alternatives by quantity and by stock value), **XYZ** by coefficient of variation and **Syntetos-Boylan demand pattern** (smooth, erratic, intermittent, lumpy), crossed in a clickable 3×3 matrix with a recommended policy per cell.
+- **Multi-criteria ABC** (optional): combines value, lead time, criticality (of the item or of the equipment it serves), number of suppliers, substitute, downtime cost and the company's own criteria (`crit_*`) into a score weighted by percentile rank, or into the ABC × criticality (VED) matrix. Weight presets, sliders, **AHP assistant** with consistency ratio, floor rules, manual class with justification, **Sankey** "value → final", a "who changed class and why" table and class **stability** over 500 simulations. The final class then applies everywhere else.
+- **Forecast** by moving average (smooth/erratic items) or **SBA — corrected Croston** (intermittent items), with **backtest** (MAE, RMSE, WMAPE, bias) and an automatic mode that picks the method with the lowest error.
+- **Replenishment parameters** per item: safety stock (with or without lead time variability), reorder point, economic order quantity adjusted to minimum lot and pack size, maximum stock, coverage and turnover.
+- **Purchase suggestions** with priority (urgent when coverage does not last through the lead time), total per supplier and export of only the selected rows.
+- **Weekly MRP** (time-phased record like SAP's MD04): gross requirements, scheduled receipts, projected stock, net requirements, planned receipts and planned releases, with **late releases**. With BOM and MPS, it does **multi-level explosion** by low-level code, detects circular BOMs and checks the total against the **total requirements matrix** r = (I − B)⁻¹ d.
+- **The math behind it**: total lot cost curve (derivative = 0 at the EOQ) and rounding penalty, lead time demand distribution and probability of running out before arrival, normal loss function and **fill rate**, service level × safety stock cost curve and cosine similarity between consumption profiles.
+- **Data quality**: a report with each problem and its source row (code with no master record, invalid or future date, invalid quantity, unknown type, duplicates, negative reconstructed balance…).
+- **Flexible column mapping**: recognizes synonyms ("cód.", "SKU", "qtde", "prazo de entrega"…) and, if needed, asks you to point to the columns — and remembers your choice.
+- **Dashboard** with 14 clickable KPIs and 17 interactive charts (ECharts), light and dark mode, responsive on mobile.
+- **Output workbook (.xlsx)** with 11 formatted sheets: Leia-me (read me), Dashboard (with the charts), ABC-XYZ, multi-criteria ABC, parameters, purchase suggestions, weekly and consolidated MRP, alerts, data quality and parameters used. It also exports CSV from any table and prints/saves to PDF.
 
-| ABC-XYZ                                                   | MRP (modo escuro)                                               |
-| --------------------------------------------------------- | --------------------------------------------------------------- |
-| ![Matriz ABC-XYZ e curva de Pareto](docs/img/abc-xyz.png) | ![Registro de MRP com explosão de BOM](docs/img/mrp-escuro.png) |
+| ABC-XYZ                                                  | MRP (dark mode)                                           |
+| -------------------------------------------------------- | --------------------------------------------------------- |
+| ![ABC-XYZ matrix and Pareto curve](docs/img/abc-xyz.png) | ![MRP record with BOM explosion](docs/img/mrp-escuro.png) |
 
-| Ver o cálculo                                                                | No celular                                                                |
-| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| ![Painel do item com o passo a passo do cálculo](docs/img/ver-o-calculo.png) | <img src="docs/img/celular.png" alt="Dashboard no celular" width="260" /> |
+| See the calculation                                                         | On mobile                                                                |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| ![Item panel with the step-by-step calculation](docs/img/ver-o-calculo.png) | <img src="docs/img/celular.png" alt="Dashboard on mobile" width="260" /> |
 
-## Metodologia resumida
+## Methodology in brief
 
-Notação: d̄ = demanda média por período, σ = desvio padrão amostral, F = previsão por período, LTₚ = lead time ÷ dias por período, Z = NORM.S.INV(nível de serviço).
+Notation: d̄ = average demand per period, σ = sample standard deviation, F = forecast per period, LTₚ = lead time ÷ days per period, Z = NORM.S.INV(service level).
 
-| Conceito             | Fórmula                                                                                  |
-| -------------------- | ---------------------------------------------------------------------------------------- |
-| Curva ABC            | classe pelo % acumulado **anterior** do consumo anual (A < 80%, B < 95%)                 |
-| XYZ                  | CV = σ ÷ d̄ → X ≤ 0,50; Y ≤ 1,00; Z > 1,00                                                |
-| Syntetos-Boylan      | ADI = n ÷ períodos com demanda; CV² dos tamanhos não nulos (cortes 1,32 e 0,49)          |
-| SBA                  | F = (1 − α/2) · z ÷ p                                                                    |
-| Estoque de segurança | ES = Z · σ · √LTₚ (ou Z · √(LTₚσ² + F²σ_LTₚ²) com variabilidade de prazo)                |
-| Ponto de pedido      | PP = F · LTₚ + ES                                                                        |
-| Lote econômico       | EOQ = √(2DS ÷ H), com H = i · custo; Q* = max(lote mínimo, ⌈EOQ ÷ múltiplo⌉ · múltiplo)  |
-| Estoque máximo       | Máx = ES + Q*                                                                            |
-| Sugestão             | Qtd = max(lote mínimo, ⌈(Máx − posição) ÷ múltiplo⌉ · múltiplo) quando posição ≤ PP      |
-| Fill rate            | β = 1 − σ_LT · G(z) ÷ Q*, com G(z) = φ(z) − z(1 − Φ(z))                                  |
-| Giro                 | (consumo em valor anualizado) ÷ (estoque médio reconstruído × custo)                     |
-| ABC multicritério    | S = Σ pesoₖ × nₖ, com nₖ = posto percentil (posição − 1) ÷ (n − 1); AHP com CR = CI ÷ RI |
+| Concept            | Formula                                                                                       |
+| ------------------ | --------------------------------------------------------------------------------------------- |
+| ABC analysis       | class by the **previous** cumulative % of annual consumption (A < 80%, B < 95%)               |
+| XYZ                | CV = σ ÷ d̄ → X ≤ 0.50; Y ≤ 1.00; Z > 1.00                                                     |
+| Syntetos-Boylan    | ADI = n ÷ periods with demand; CV² of non-zero sizes (cut-offs 1.32 and 0.49)                 |
+| SBA                | F = (1 − α/2) · z ÷ p                                                                         |
+| Safety stock       | ES = Z · σ · √LTₚ (or Z · √(LTₚσ² + F²σ_LTₚ²) with lead time variability)                     |
+| Reorder point      | PP = F · LTₚ + ES                                                                             |
+| Economic order qty | EOQ = √(2DS ÷ H), with H = i · cost; Q* = max(minimum lot, ⌈EOQ ÷ multiple⌉ · multiple)       |
+| Maximum stock      | Máx = ES + Q*                                                                                 |
+| Suggestion         | Qty = max(minimum lot, ⌈(Máx − position) ÷ multiple⌉ · multiple) when position ≤ PP           |
+| Fill rate          | β = 1 − σ_LT · G(z) ÷ Q*, with G(z) = φ(z) − z(1 − Φ(z))                                      |
+| Turnover           | (annualized consumption value) ÷ (reconstructed average stock × cost)                         |
+| Multi-criteria ABC | S = Σ weightₖ × nₖ, with nₖ = percentile rank (position − 1) ÷ (n − 1); AHP with CR = CI ÷ RI |
 
-A aba **Metodologia** do app explica cada fórmula com exemplo numérico, as decisões de implementação e um glossário. Os casos calculados à mão estão em [`tests/`](tests).
+The app's **Metodologia** (methodology) tab explains each formula with a numeric example, the implementation decisions and a glossary. The hand-calculated cases are in [`tests/`](tests).
 
-## Formato da planilha de entrada
+## Input spreadsheet format
 
-Baixe a **planilha-modelo** no app (tem instruções, exemplo e listas suspensas). Em resumo:
+Download the **template spreadsheet** in the app (it has instructions, an example and drop-down lists). In short:
 
-- **Materiais** (obrigatória): `codigo`, `descricao`, `unidade`, `estoque_atual`, `lead_time_dias` + opcionais `custo_unitario`, `desvio_lead_time_dias`, `lote_minimo`, `multiplo_compra`, `estoque_seguranca_manual`, `fornecedor`, `categoria`, `tipo_item`, `data_cadastro`.
-- **Movimentacoes** (obrigatória): `data`, `codigo`, `tipo` (Entrada, Saída, Ajuste +, Ajuste -, Devolução ao estoque, Devolução ao fornecedor), `quantidade` + opcionais `valor_total`, `documento`. Só **Saída** conta como consumo.
-- Opcionais: **PedidosAbertos** (`codigo`, `data_prevista`, `quantidade`), **BOM** (`codigo_pai`, `codigo_filho`, `quantidade_por`, `perda_pct`) e **MPS** (`codigo`, `semana_inicio`, `quantidade`).
-- ABC multicritério (tudo opcional): colunas `criticidade`, `num_fornecedores`, `possui_substituto`, `custo_parada_hora`, `classe_manual`, `justificativa_classe` e `crit_<nome>` em Materiais, e as abas **Equipamentos** (`equipamento`, `criticidade`, `setor`) e **OndeUsado** (`codigo`, `equipamento`).
+- **Materiais** (materials, required): `codigo`, `descricao`, `unidade`, `estoque_atual`, `lead_time_dias` + optional `custo_unitario`, `desvio_lead_time_dias`, `lote_minimo`, `multiplo_compra`, `estoque_seguranca_manual`, `fornecedor`, `categoria`, `tipo_item`, `data_cadastro`.
+- **Movimentacoes** (stock movements, required): `data`, `codigo`, `tipo` (Entrada, Saída, Ajuste +, Ajuste -, Devolução ao estoque, Devolução ao fornecedor), `quantidade` + optional `valor_total`, `documento`. Only **Saída** (issue) counts as consumption.
+- Optional: **PedidosAbertos** (open orders: `codigo`, `data_prevista`, `quantidade`), **BOM** (`codigo_pai`, `codigo_filho`, `quantidade_por`, `perda_pct`) and **MPS** (`codigo`, `semana_inicio`, `quantidade`).
+- Multi-criteria ABC (all optional): columns `criticidade`, `num_fornecedores`, `possui_substituto`, `custo_parada_hora`, `classe_manual`, `justificativa_classe` and `crit_<name>` in Materiais, and the sheets **Equipamentos** (equipment: `equipamento`, `criticidade`, `setor`) and **OndeUsado** (where used: `codigo`, `equipamento`).
 
-Aceita .xlsx ou um .csv por aba (separador `;` ou `,`, UTF-8 ou Windows-1252), datas do Excel, dd/mm/aaaa ou aaaa-mm-dd, e números no formato brasileiro.
+Accepts .xlsx or one .csv per sheet (separator `;` or `,`, UTF-8 or Windows-1252), Excel dates, dd/mm/yyyy or yyyy-mm-dd, and numbers in Brazilian format.
 
-## Privacidade
+## Privacy
 
-Tudo roda **no seu navegador**, num Web Worker: a planilha é lida e calculada localmente e **nunca é enviada a nenhum servidor**. Sem backend, sem banco de dados, sem rastreadores, sem cookies. O navegador guarda apenas preferências (parâmetros, tema e o mapeamento de colunas), nunca os seus dados.
+Everything runs **in your browser**, in a Web Worker: the spreadsheet is read and calculated locally and **is never sent to any server**. No backend, no database, no trackers, no cookies. The browser only stores preferences (parameters, theme and column mapping), never your data.
 
-## Desempenho
+## Performance
 
-Planilha sintética com **2.000 itens e 100.000 movimentações** (3,4 MB): cerca de **2,5 s** do envio ao dashboard no Chrome do computador de desenvolvimento, sem travar a interface (maior pausa medida: 33 ms). No Node, leitura 1,7 s e cálculo 0,3 s. Para reproduzir: `npx tsx scripts/gerar-volume.ts volume.xlsx`.
+Synthetic spreadsheet with **2,000 items and 100,000 movements** (3.4 MB): about **2.5 s** from upload to dashboard in Chrome on the development computer, without freezing the interface (longest pause measured: 33 ms). In Node, reading 1.7 s and calculation 0.3 s. To reproduce: `npx tsx scripts/gerar-volume.ts volume.xlsx`.
 
 ## Stack
 
-Vite · React 19 · TypeScript (strict) · Tailwind CSS v4 · Apache ECharts · TanStack Table e Virtual · SheetJS Community Edition (leitura) · ExcelJS (escrita) · PapaParse · lucide-react · Inter (self-hosted) · Vitest · ESLint + Prettier · GitHub Actions + GitHub Pages. Somente bibliotecas de licença permissiva (MIT, Apache-2.0, ISC); nada carregado de CDN em tempo de execução.
+Vite · React 19 · TypeScript (strict) · Tailwind CSS v4 · Apache ECharts · TanStack Table and Virtual · SheetJS Community Edition (reading) · ExcelJS (writing) · PapaParse · lucide-react · Inter (self-hosted) · Vitest · ESLint + Prettier · GitHub Actions + GitHub Pages. Only permissively licensed libraries (MIT, Apache-2.0, ISC); nothing loaded from a CDN at runtime.
 
-## Como rodar localmente
+## How to run locally
 
-Requer Node.js 22 ou mais recente.
+Requires Node.js 22 or newer.
 
 ```bash
 npm install
 npm run dev          # http://localhost:5173/kit-estoque-mrp/
-npm test             # testes do motor de cálculo, leitura e exportação
+npm test             # tests for the calculation engine, reading and export
 npm run lint
-npm run build        # gera dist/
-npm run demo         # regera public/exemplos/*.xlsx (dados sintéticos, semente fixa)
+npm run build        # generates dist/
+npm run demo         # regenerates public/exemplos/*.xlsx (synthetic data, fixed seed)
 ```
 
-Estrutura: `src/engine/` é o motor de cálculo em TypeScript puro (sem React, sem DOM), com uma única entrada `processar(entrada, parametros)`. `src/io/` lê e escreve planilhas, `src/worker/` roda tudo fora da thread da interface, e `src/pages/` e `src/charts/` são a interface.
+Structure: `src/engine/` is the calculation engine in pure TypeScript (no React, no DOM), with a single entry point `processar(entrada, parametros)`. `src/io/` reads and writes spreadsheets, `src/worker/` runs everything off the interface thread, and `src/pages/` and `src/charts/` are the interface.
 
-## Dados de exemplo
+## Sample data
 
-As planilhas em `public/exemplos/` são **100% sintéticas** ("Metalúrgica Exemplo Ltda"), geradas por `scripts/gerar-dados-demo.ts` com semente fixa: ~150 itens e 18 meses de movimentações com mistura proposital de padrões de demanda, rupturas, excessos e algumas linhas com erro, além de uma demo de montagem com BOM de 3 níveis e MPS de 12 semanas. As ilustrações são SVGs originais criados para o projeto.
+The spreadsheets in `public/exemplos/` are **100% synthetic** ("Metalúrgica Exemplo Ltda"), generated by `scripts/gerar-dados-demo.ts` with a fixed seed: ~150 items and 18 months of movements with a deliberate mix of demand patterns, stockouts, excess stock and some rows with errors, plus an assembly demo with a 3-level BOM and a 12-week MPS. The illustrations are original SVGs made for the project.
 
 ## Roadmap
 
-- Sazonalidade explícita na previsão (Holt-Winters) para itens com histórico de 24+ meses.
-- Política de revisão periódica (R, S) como alternativa ao ponto de pedido.
-- Restrição de capacidade e calendário de fornecedores no MRP.
-- Comparação entre dois cenários de parâmetros lado a lado.
+- Explicit seasonality in the forecast (Holt-Winters) for items with 24+ months of history.
+- Periodic review policy (R, S) as an alternative to the reorder point.
+- Capacity constraints and supplier calendars in the MRP.
+- Side-by-side comparison of two parameter scenarios.
 
-## Autor
+## Author
 
-Desenvolvido por **Gabriel Cunha** — [LinkedIn](https://www.linkedin.com/in/gabriel-cunha-xp).
+Built by **Gabriel Cunha** — [LinkedIn](https://www.linkedin.com/in/gabriel-cunha-xp).
 
-## Licença
+## License
 
 [MIT](LICENSE).
